@@ -6,46 +6,93 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockExecutive } from "@/lib/mock-data";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { getExecutiveSession, setExecutiveSession } from "@/lib/auth-cookies";
 
 export default function ExecutiveProfilePage() {
   const [executive, setExecutive] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
+    country_code: "+91",
     phone: "",
     email: "",
   });
 
   useEffect(() => {
-    // Load executive session
-    const session = localStorage.getItem("executive-session");
-    if (session) {
-      const executiveData = JSON.parse(session);
-      setExecutive(executiveData);
-      setFormData({
-        name: executiveData.name || "",
-        phone: executiveData.phone || "",
-        email: executiveData.email || "",
-      });
+    // Load executive from database
+    const session = getExecutiveSession();
+    if (session && session.id) {
+      fetchExecutiveProfile(session.id);
     }
   }, []);
 
-  const handleSave = () => {
-    // Update the session with new data
-    const updatedExecutive = {
-      ...executive,
-      name: formData.name,
-      phone: formData.phone,
-      email: formData.email,
-    };
-    
-    localStorage.setItem("executive-session", JSON.stringify(updatedExecutive));
-    setExecutive(updatedExecutive);
-    
-    alert("Profile updated successfully!");
+  const fetchExecutiveProfile = async (id: string) => {
+    try {
+      const response = await fetch(`/api/executive/profile?id=${id}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setExecutive(data.executive);
+        setFormData({
+          name: data.executive.name || "",
+          country_code: data.executive.country_code || "+91",
+          phone: data.executive.phone || "",
+          email: data.executive.email || "",
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (!executive) {
+  const handleSave = async () => {
+    setSaving(true);
+
+    try {
+      const response = await fetch('/api/executive/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: executive.id,
+          ...formData,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update session with new data
+        const fullPhone = formData.phone && formData.country_code 
+          ? `${formData.country_code}${formData.phone}`
+          : null;
+
+        const updatedExecutive = {
+          id: data.executive.id,
+          email: data.executive.email,
+          name: data.executive.name,
+          phone: fullPhone,
+          loginTime: executive.loginTime || new Date().toISOString(),
+        };
+        
+        setExecutiveSession(updatedExecutive);
+        setExecutive(data.executive);
+        
+        alert("Profile updated successfully!");
+      } else {
+        alert(data.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      alert('Failed to update profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading || !executive) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
@@ -63,9 +110,9 @@ export default function ExecutiveProfilePage() {
             Manage your executive account information
           </p>
         </div>
-        <Button onClick={handleSave}>
+        <Button onClick={handleSave} disabled={saving}>
           <Save className="mr-2 h-4 w-4" />
-          Save Changes
+          {saving ? "Saving..." : "Save Changes"}
         </Button>
       </div>
 
@@ -109,14 +156,13 @@ export default function ExecutiveProfilePage() {
             </div>
 
             <div className="md:col-span-2">
-              <Label htmlFor="phone">Phone Number (10 digits)</Label>
-              <Input
+              <PhoneInput
+                countryCode={formData.country_code}
+                phoneNumber={formData.phone}
+                onCountryCodeChange={(code) => setFormData({ ...formData, country_code: code })}
+                onPhoneNumberChange={(number) => setFormData({ ...formData, phone: number })}
+                label="Phone Number"
                 id="phone"
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="1234567890"
-                maxLength={10}
               />
             </div>
           </div>
@@ -143,15 +189,33 @@ export default function ExecutiveProfilePage() {
 
             <div>
               <p className="text-sm font-medium text-slate-500 mb-1">Account Status</p>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Active
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                executive.is_active 
+                  ? "bg-green-100 text-green-800" 
+                  : "bg-red-100 text-red-800"
+              }`}>
+                {executive.is_active ? "Active" : "Inactive"}
               </span>
             </div>
 
             <div>
               <p className="text-sm font-medium text-slate-500 mb-1">Last Login</p>
               <p className="text-slate-900 text-sm">
-                {executive.loginTime ? new Date(executive.loginTime).toLocaleString() : "N/A"}
+                {executive.last_login_at ? new Date(executive.last_login_at).toLocaleString() : "Never"}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-slate-500 mb-1">Account Created</p>
+              <p className="text-slate-900 text-sm">
+                {executive.created_at ? new Date(executive.created_at).toLocaleDateString() : "N/A"}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-slate-500 mb-1">Last Updated</p>
+              <p className="text-slate-900 text-sm">
+                {executive.updated_at ? new Date(executive.updated_at).toLocaleDateString() : "N/A"}
               </p>
             </div>
           </div>
@@ -166,10 +230,10 @@ export default function ExecutiveProfilePage() {
               <User className="h-5 w-5 text-slate-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-slate-900 mb-1">Authentication Method</h3>
+              <h3 className="font-semibold text-slate-900 mb-1">Authentication & Security</h3>
               <p className="text-sm text-slate-600">
-                You are currently using OTP-based authentication. 
-                An OTP will be sent to your email address ({formData.email}) when you log in.
+                Your account is secured with password-based authentication. 
+                To change your password, please contact the administrator.
               </p>
             </div>
           </div>

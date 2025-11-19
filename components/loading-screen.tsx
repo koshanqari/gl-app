@@ -6,12 +6,14 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 
 interface LoadingScreenProps {
-  onComplete: () => void;
+  onComplete?: () => void;
+  progress?: number;
+  showStartButton?: boolean;
 }
 
-export function LoadingScreen({ onComplete }: LoadingScreenProps) {
+export function LoadingScreen({ onComplete, progress, showStartButton: externalShowStartButton }: LoadingScreenProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [showStartButton, setShowStartButton] = useState(false);
+  const [internalShowStartButton, setInternalShowStartButton] = useState(false);
 
   const steps = [
     { icon: Shield, text: "Securing your session...", color: "text-blue-500" },
@@ -20,29 +22,42 @@ export function LoadingScreen({ onComplete }: LoadingScreenProps) {
     { icon: CheckCircle, text: "Ready!", color: "text-emerald-500" },
   ];
 
+  // Use external progress if provided, otherwise use step-based progress
+  const displayProgress = progress !== undefined ? progress : (currentStep / (steps.length - 1)) * 100;
+  const showButton = externalShowStartButton !== undefined ? externalShowStartButton : internalShowStartButton;
+
   useEffect(() => {
-    const stepInterval = setInterval(() => {
-      setCurrentStep((prev) => {
-        if (prev < steps.length - 1) {
-          return prev + 1;
-        }
-        return prev;
-      });
-    }, 900);
+    // Only run auto-stepping if progress is not externally controlled
+    if (progress === undefined) {
+      const stepInterval = setInterval(() => {
+        setCurrentStep((prev) => {
+          if (prev < steps.length - 1) {
+            return prev + 1;
+          }
+          return prev;
+        });
+      }, 900);
 
-    const buttonTimeout = setTimeout(() => {
-      setShowStartButton(true);
-    }, 2500);
+      const buttonTimeout = setTimeout(() => {
+        setInternalShowStartButton(true);
+      }, 2500);
 
-    return () => {
-      clearInterval(stepInterval);
-      clearTimeout(buttonTimeout);
-    };
+      return () => {
+        clearInterval(stepInterval);
+        clearTimeout(buttonTimeout);
+      };
+    } else {
+      // Update step based on progress
+      const progressStep = Math.floor((progress / 100) * (steps.length - 1));
+      setCurrentStep(progressStep);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [progress]);
 
   const handleStart = () => {
-    onComplete();
+    if (onComplete) {
+      onComplete();
+    }
   };
 
   const CurrentIcon = steps[currentStep].icon;
@@ -92,19 +107,31 @@ export function LoadingScreen({ onComplete }: LoadingScreenProps) {
           <p className="text-slate-400 text-sm">GoldenLotus MICE Management</p>
         </div>
 
-        {/* Progress Steps */}
-        <div className="flex items-center justify-center gap-2 mt-4">
-          {steps.map((_, index) => (
-            <div
-              key={index}
-              className={`h-1 rounded-full transition-all duration-500 ${
-                index <= currentStep
-                  ? "w-12 bg-primary"
-                  : "w-8 bg-slate-700"
-              }`}
-            />
-          ))}
-        </div>
+        {/* Progress Steps or Bar */}
+        {progress !== undefined ? (
+          <div className="w-full max-w-md mx-auto mt-6 space-y-2">
+            <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+              <div 
+                className="h-full bg-white transition-all duration-300 ease-out rounded-full"
+                style={{ width: `${displayProgress}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-slate-400 text-center font-medium">{Math.round(displayProgress)}% Complete</p>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-2 mt-4">
+            {steps.map((_, index) => (
+              <div
+                key={index}
+                className={`h-1 rounded-full transition-all duration-500 ${
+                  index <= currentStep
+                    ? "w-12 bg-primary"
+                    : "w-8 bg-slate-700"
+                }`}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Feature Pills */}
         <div className="flex flex-wrap items-center justify-center gap-3 mt-6 mx-auto max-w-2xl">
@@ -123,7 +150,7 @@ export function LoadingScreen({ onComplete }: LoadingScreenProps) {
         </div>
 
         {/* Start Button */}
-        {showStartButton && (
+        {showButton && (
           <div className="mt-6 animate-fade-in-up">
             <Button
               onClick={handleStart}
@@ -137,17 +164,38 @@ export function LoadingScreen({ onComplete }: LoadingScreenProps) {
         )}
       </div>
 
-      {/* Animated particles */}
+      {/* Animated particles - fixed positions to avoid hydration mismatch */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(20)].map((_, i) => (
+        {[
+          { left: 10, top: 20, delay: 0 },
+          { left: 85, top: 15, delay: 0.5 },
+          { left: 25, top: 70, delay: 1 },
+          { left: 60, top: 40, delay: 0.3 },
+          { left: 45, top: 85, delay: 0.8 },
+          { left: 75, top: 60, delay: 0.2 },
+          { left: 15, top: 50, delay: 1.2 },
+          { left: 90, top: 75, delay: 0.6 },
+          { left: 35, top: 25, delay: 0.9 },
+          { left: 55, top: 10, delay: 0.4 },
+          { left: 20, top: 90, delay: 1.5 },
+          { left: 70, top: 30, delay: 0.7 },
+          { left: 40, top: 55, delay: 1.1 },
+          { left: 80, top: 45, delay: 0.1 },
+          { left: 30, top: 65, delay: 1.3 },
+          { left: 65, top: 20, delay: 0.4 },
+          { left: 50, top: 80, delay: 0.9 },
+          { left: 95, top: 50, delay: 1.4 },
+          { left: 5, top: 35, delay: 0.6 },
+          { left: 42, top: 12, delay: 1.0 },
+        ].map((particle, i) => (
           <div
             key={i}
             className="absolute w-1 h-1 bg-white rounded-full opacity-30"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animation: `float ${3 + Math.random() * 4}s ease-in-out infinite`,
-              animationDelay: `${Math.random() * 2}s`,
+              left: `${particle.left}%`,
+              top: `${particle.top}%`,
+              animation: `float ${4 + (i % 3)}s ease-in-out infinite`,
+              animationDelay: `${particle.delay}s`,
             }}
           />
         ))}

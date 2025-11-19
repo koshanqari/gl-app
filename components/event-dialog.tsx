@@ -31,9 +31,10 @@ interface EventDialogProps {
   onClose: () => void;
   event?: Event | null;
   partnerId: string;
+  onSubmit: (eventData: any) => void;
 }
 
-export function EventDialog({ isOpen, onClose, event, partnerId }: EventDialogProps) {
+export function EventDialog({ isOpen, onClose, event, partnerId, onSubmit }: EventDialogProps) {
   const [formData, setFormData] = useState({
     event_name: "",
     event_type: "",
@@ -72,16 +73,10 @@ export function EventDialog({ isOpen, onClose, event, partnerId }: EventDialogPr
     
     const eventData = {
       ...formData,
-      partner_id: partnerId,
-      id: event?.id || `event-${Date.now()}`,
-      status: "active",
-      created_at: event?.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      ...(event?.id && { id: event.id }), // Only include id if editing
     };
 
-    console.log("Event saved:", eventData);
-    alert(`Event ${event ? "updated" : "created"} successfully! (Will be saved to backend)`);
-    onClose();
+    onSubmit(eventData);
   };
 
   const handleClose = () => {

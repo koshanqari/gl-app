@@ -1,33 +1,129 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Calendar, MapPin, Edit, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getPartnersWithEventCount, getEventsByPartnerId } from "@/lib/mock-data";
 import { EventDialog } from "@/components/event-dialog";
 
 export default function EventManagementPage() {
   const params = useParams();
   const partnerId = params.id as string;
 
-  const partner = getPartnersWithEventCount().find(p => p.id === partnerId);
-  const events = getEventsByPartnerId(partnerId);
-
+  const [partner, setPartner] = useState<any>(null);
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<any>(null);
+
+  // Fetch partner data
+  useEffect(() => {
+    fetchPartner();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partnerId]);
+
+  // Fetch events data
+  useEffect(() => {
+    fetchEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partnerId]);
+
+  const fetchPartner = async () => {
+    try {
+      const response = await fetch(`/api/partners/${partnerId}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setPartner(data.partner);
+      } else {
+        console.error('Failed to fetch partner:', data.message);
+      }
+    } catch (error) {
+      console.error('Failed to fetch partner:', error);
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/events?partner_id=${partnerId}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setEvents(data.events);
+      } else {
+        console.error('Failed to fetch events:', data.message);
+      }
+    } catch (error) {
+      console.error('Failed to fetch events:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!partner) {
     return (
       <Card>
         <CardContent className="p-12 text-center">
-          <p className="text-slate-500">Partner not found</p>
+          {loading ? (
+            <div className="space-y-2">
+              <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto"></div>
+              <p className="text-slate-500">Loading partner...</p>
+            </div>
+          ) : (
+            <p className="text-slate-500">Partner not found</p>
+          )}
         </CardContent>
       </Card>
     );
   }
+
+  const handleAddEvent = async (newEvent: any) => {
+    try {
+      const response = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newEvent, partner_id: partnerId }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await fetchEvents(); // Refresh events list
+        setIsDialogOpen(false);
+      } else {
+        alert(data.message || 'Failed to create event');
+      }
+    } catch (error) {
+      console.error('Failed to create event:', error);
+      alert('Failed to create event. Please try again.');
+    }
+  };
+
+  const handleEditEvent = async (updatedEvent: any) => {
+    try {
+      const response = await fetch(`/api/events/${updatedEvent.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedEvent),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await fetchEvents(); // Refresh events list
+        setEditingEvent(null);
+        setIsDialogOpen(false);
+      } else {
+        alert(data.message || 'Failed to update event');
+      }
+    } catch (error) {
+      console.error('Failed to update event:', error);
+      alert('Failed to update event. Please try again.');
+    }
+  };
 
   const handleOpenDialog = (event?: any) => {
     if (event) {
@@ -73,7 +169,16 @@ export default function EventManagementPage() {
       </div>
 
       {/* Events List */}
-      {events.length > 0 ? (
+      {loading ? (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <div className="space-y-2">
+              <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto"></div>
+              <p className="text-slate-500">Loading events...</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : events.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {events.map((event) => (
             <Card 
@@ -147,9 +252,13 @@ export default function EventManagementPage() {
       {/* Event Dialog */}
       <EventDialog
         isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
+        onClose={() => {
+          setIsDialogOpen(false);
+          setEditingEvent(null);
+        }}
         event={editingEvent}
         partnerId={partnerId}
+        onSubmit={editingEvent ? handleEditEvent : handleAddEvent}
       />
     </div>
   );

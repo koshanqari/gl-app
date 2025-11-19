@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockExecutive } from "@/lib/mock-data";
 import { LoadingScreen } from "@/components/loading-screen";
+import { setExecutiveSession, getAndClearRedirectUrl } from "@/lib/auth-cookies";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showLoadingScreen, setShowLoadingScreen] = useState(false);
@@ -22,28 +22,43 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      // Call login API
+      const response = await fetch('/api/executive/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-    // Validate credentials
-    if (email === mockExecutive.email && otp === "7274") {
-      // Store session in localStorage (mock authentication)
-      localStorage.setItem("executive-session", JSON.stringify({
-        ...mockExecutive,
-        loginTime: new Date().toISOString(),
-      }));
-      
-      // Show loading screen animation
-      setShowLoadingScreen(true);
-    } else {
-      setError("Invalid email or OTP. Please try again.");
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store session in cookie
+        setExecutiveSession({
+          id: data.executive.id,
+          email: data.executive.email,
+          name: data.executive.name,
+          phone: data.executive.phone,
+          loginTime: new Date().toISOString(),
+        });
+        
+        // Show loading screen animation
+        setShowLoadingScreen(true);
+      } else {
+        setError(data.message || "Invalid email or password. Please try again.");
+        setLoading(false);
+      }
+    } catch (error) {
+      setError("Login failed. Please try again.");
       setLoading(false);
     }
   };
 
   // Handle loading screen completion
   const handleLoadingComplete = () => {
-    router.push("/executive/executive_portal/partners");
+    // Check for redirect URL or default to partners page
+    const redirectUrl = getAndClearRedirectUrl() || "/executive/executive_portal/partners";
+    router.push(redirectUrl);
   };
 
   // Show loading screen if authenticated
@@ -52,61 +67,160 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-3xl font-bold text-center">
-            GoldenLotus
-          </CardTitle>
-          <CardDescription className="text-center">
-            MICE Management Portal
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-              />
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      {/* Animated Background */}
+      <div className="absolute inset-0 overflow-hidden opacity-10">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `
+            linear-gradient(to right, white 1px, transparent 1px),
+            linear-gradient(to bottom, white 1px, transparent 1px)
+          `,
+          backgroundSize: '50px 50px'
+        }} />
+      </div>
+
+      {/* Animated particles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[
+          { left: 10, top: 20, delay: 0 },
+          { left: 85, top: 15, delay: 0.5 },
+          { left: 25, top: 70, delay: 1 },
+          { left: 60, top: 40, delay: 0.3 },
+          { left: 45, top: 85, delay: 0.8 },
+          { left: 75, top: 60, delay: 0.2 },
+          { left: 15, top: 50, delay: 1.2 },
+          { left: 90, top: 75, delay: 0.6 },
+          { left: 35, top: 25, delay: 0.9 },
+          { left: 55, top: 10, delay: 0.4 },
+          { left: 20, top: 90, delay: 1.5 },
+          { left: 70, top: 30, delay: 0.7 },
+          { left: 40, top: 55, delay: 1.1 },
+          { left: 80, top: 45, delay: 0.1 },
+          { left: 30, top: 65, delay: 1.3 },
+          { left: 65, top: 20, delay: 0.4 },
+          { left: 50, top: 80, delay: 0.9 },
+          { left: 95, top: 50, delay: 1.4 },
+          { left: 5, top: 35, delay: 0.6 },
+          { left: 42, top: 12, delay: 1.0 },
+        ].map((particle, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-1 bg-white rounded-full opacity-30"
+            style={{
+              left: `${particle.left}%`,
+              top: `${particle.top}%`,
+              animation: `float ${4 + (i % 3)}s ease-in-out infinite`,
+              animationDelay: `${particle.delay}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="relative min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Logo */}
+          <div className="flex items-center justify-center mb-6">
+            <Image
+              src="https://cdn-sleepyhug-prod.b-cdn.net/media/intellsys-logo.webp"
+              alt="Intellsys Logo"
+              width={200}
+              height={60}
+              className="h-12 w-auto object-contain"
+              unoptimized
+            />
+          </div>
+
+          {/* Login Card */}
+          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
+            <div className="text-center mb-6">
+              <p className="text-sm text-slate-400">
+                Executive Portal
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="otp">OTP</Label>
-              <Input
-                id="otp"
-                type="text"
-                placeholder="Enter OTP"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                required
-                disabled={loading}
-                maxLength={4}
-              />
-            </div>
-            {error && (
-              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-                {error}
+
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-slate-300 text-sm font-medium">
+                  Email Address
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="executive@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={loading}
+                  className="h-12 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-slate-600 focus:ring-slate-600"
+                />
               </div>
-            )}
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={loading}
-            >
-              {loading ? "Logging in..." : "Login"}
-            </Button>
-            <p className="text-xs text-muted-foreground text-center mt-4">
-              Enter your email and OTP to access the executive panel
-            </p>
-          </form>
-        </CardContent>
-      </Card>
+              
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-slate-300 text-sm font-medium">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={loading}
+                  className="h-12 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-slate-600 focus:ring-slate-600"
+                />
+              </div>
+              
+              {error && (
+                <div className="text-sm text-red-400 bg-red-950/50 border border-red-900 p-3 rounded-lg">
+                  {error}
+                </div>
+              )}
+              
+              <Button 
+                type="submit" 
+                className="w-full h-12 bg-white text-slate-900 hover:bg-slate-100 font-semibold text-base rounded-lg transition-all" 
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-2 h-2 bg-slate-900 rounded-full animate-bounce" />
+                    <span className="w-2 h-2 bg-slate-900 rounded-full animate-bounce animation-delay-200" />
+                    <span className="w-2 h-2 bg-slate-900 rounded-full animate-bounce animation-delay-400" />
+                  </span>
+                ) : (
+                  "Access Portal"
+                )}
+              </Button>
+              
+              <p className="text-xs text-slate-500 text-center pt-2">
+                Protected by enterprise-grade security
+              </p>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <style jsx>{`
+        @keyframes float {
+          0%, 100% {
+            transform: translateY(0) translateX(0);
+            opacity: 0;
+          }
+          50% {
+            transform: translateY(-20px) translateX(10px);
+            opacity: 0.3;
+          }
+        }
+        
+        .animation-delay-200 {
+          animation-delay: 0.2s;
+        }
+        .animation-delay-400 {
+          animation-delay: 0.4s;
+        }
+      `}</style>
     </div>
   );
 }

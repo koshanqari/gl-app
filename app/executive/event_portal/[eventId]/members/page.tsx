@@ -1,80 +1,148 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, useMemo, useEffect } from "react";
-import { Plus, Upload, Link2, Search, Mail, Phone, User, Download, ChevronDown } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Plus, Upload, Link2, Search, Mail, Phone, User, Download, ChevronDown, FileCheck, X, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { getMembersByEventId } from "@/lib/mock-data";
 import { MemberDialog } from "@/components/member-dialog";
+import { MemberDetailsDialog } from "@/components/member-details-dialog";
+import { useRefresh } from "@/contexts/refresh-context";
 
 export default function MembersPage() {
   const params = useParams();
   const eventId = params.eventId as string;
+  const { refreshKey } = useRefresh();
 
-  const [members, setMembers] = useState(getMembersByEventId(eventId));
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<any>(null);
+  const [viewingMember, setViewingMember] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [kycFilter, setKycFilter] = useState<"all" | "completed" | "pending">("all");
   const [showLinkDialog, setShowLinkDialog] = useState(false);
-  const [showCSVDropdown, setShowCSVDropdown] = useState(false);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showCSVDropdown) {
-        setShowCSVDropdown(false);
+  // Fetch members from API
+  const fetchMembers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/members?event_id=${eventId}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setMembers(data.members);
+      } else {
+        console.error('Failed to fetch members:', data.message);
       }
-    };
+    } catch (error) {
+      console.error('Failed to fetch members:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId]);
+
+  // Fetch members on mount and when refresh is triggered
+  useEffect(() => {
+    fetchMembers();
+  }, [fetchMembers, refreshKey]);
+
+  // Calculate KYC stats
+  const kycStats = useMemo(() => {
+    const completed = members.filter(m => m.kyc_document_type && m.kyc_document_type.trim() !== "").length;
+    const pending = members.length - completed;
+    return { completed, pending, total: members.length };
+  }, [members]);
+
+  // Filter members based on search query and KYC status
+  const filteredMembers = useMemo(() => {
+    let filtered = members;
     
-    if (showCSVDropdown) {
-      document.addEventListener('click', handleClickOutside);
+    // Apply KYC filter
+    if (kycFilter === "completed") {
+      filtered = filtered.filter(m => m.kyc_document_type && m.kyc_document_type.trim() !== "");
+    } else if (kycFilter === "pending") {
+      filtered = filtered.filter(m => !m.kyc_document_type || m.kyc_document_type.trim() === "");
     }
     
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [showCSVDropdown]);
-
-  // Filter members based on search query
-  const filteredMembers = useMemo(() => {
-    if (!searchQuery.trim()) return members;
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (member) =>
+          member.name.toLowerCase().includes(query) ||
+          member.email.toLowerCase().includes(query) ||
+          member.employee_id.toLowerCase().includes(query) ||
+          member.phone.toLowerCase().includes(query) ||
+          (member.country_code && member.country_code.toLowerCase().includes(query))
+      );
+    }
     
-    const query = searchQuery.toLowerCase();
-    return members.filter(
-      (member) =>
-        member.name.toLowerCase().includes(query) ||
-        member.email.toLowerCase().includes(query) ||
-        member.employee_id.toLowerCase().includes(query) ||
-        member.phone.toLowerCase().includes(query)
-    );
-  }, [members, searchQuery]);
+    return filtered;
+  }, [members, searchQuery, kycFilter]);
 
   const handleAddMember = () => {
     setEditingMember(null);
     setIsDialogOpen(true);
   };
 
-  const handleEditMember = (member: any) => {
-    setEditingMember(member);
+  const handleViewMember = (member: any) => {
+    setViewingMember(member);
+    setIsDetailsDialogOpen(true);
+  };
+
+  const handleEditFromDetails = () => {
+    setEditingMember(viewingMember);
+    setIsDetailsDialogOpen(false);
     setIsDialogOpen(true);
   };
 
-  const handleSaveMember = (memberData: any) => {
-    if (editingMember) {
-      // Update existing member
-      setMembers(members.map((m) => (m.id === memberData.id ? memberData : m)));
-    } else {
-      // Add new member
-      setMembers([...members, memberData]);
+  const handleSaveMember = async (memberData: any) => {
+    try {
+      if (editingMember) {
+        // Update existing member
+        const response = await fetch(`/api/members/${memberData.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(memberData),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          await fetchMembers(); // Refresh the list
+        } else {
+          alert(data.message || 'Failed to update member');
+        }
+      } else {
+        // Add new member
+        const response = await fetch('/api/members', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...memberData, event_id: eventId }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          await fetchMembers(); // Refresh the list
+        } else {
+          alert(data.message || 'Failed to create member');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save member:', error);
+      alert('Failed to save member. Please try again.');
     }
   };
 
   const handleDownloadTemplate = () => {
-    // Create CSV template
-    const csvContent = "Employee ID,Name,Email,Phone\nEMP001,John Doe,john.doe@example.com,1234567890\n";
+    // Create CSV template with country code separate
+    const csvContent = "Employee ID,Name,Email,Country Code,Phone\nEMP001,John Doe,john.doe@example.com,+91,1234567890\n";
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -84,17 +152,138 @@ export default function MembersPage() {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
-    setShowCSVDropdown(false);
   };
 
-  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // TODO: Parse CSV and add members
-      console.log("CSV file selected:", file.name);
-      alert("CSV upload will be implemented with backend integration");
-      setShowCSVDropdown(false);
+  const handleDownloadData = () => {
+    // Export existing members data
+    if (members.length === 0) {
+      alert('No members to export');
+      return;
     }
+
+    const headers = ['Employee ID', 'Name', 'Email', 'Country Code', 'Phone', 'KYC Type', 'KYC Number'];
+    const rows = members.map(member => [
+      member.employee_id || '',
+      member.name || '',
+      member.email || '',
+      member.country_code || '+91',
+      member.phone || '',
+      member.kyc_document_type || '',
+      member.kyc_document_number || ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `members_${eventId}_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        alert('CSV file is empty or invalid');
+        return;
+      }
+
+      // Parse CSV
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      const expectedHeaders = ['Employee ID', 'Name', 'Email', 'Country Code', 'Phone'];
+      
+      // Validate headers
+      const hasRequiredHeaders = expectedHeaders.every(h => 
+        headers.some(header => header.toLowerCase() === h.toLowerCase())
+      );
+
+      if (!hasRequiredHeaders) {
+        alert('Invalid CSV format. Please use the template provided.');
+        return;
+      }
+
+      // Parse rows
+      const newMembers = [];
+      const errors = [];
+      const skipped = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        if (values.length < 5 || !values[0]) continue; // Skip empty rows
+
+        const memberData = {
+          employee_id: values[0],
+          name: values[1],
+          email: values[2],
+          country_code: values[3] || '+91',
+          phone: values[4],
+        };
+
+        // Check if employee_id or email already exists
+        const existingMember = members.find(
+          m => m.employee_id === memberData.employee_id || m.email === memberData.email
+        );
+
+        if (existingMember) {
+          skipped.push(`Row ${i + 1}: ${memberData.employee_id} (already exists)`);
+          continue;
+        }
+
+        newMembers.push(memberData);
+      }
+
+      // Upload new members
+      if (newMembers.length > 0) {
+        const successCount = await Promise.all(
+          newMembers.map(async (memberData) => {
+            try {
+              const response = await fetch('/api/members', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...memberData, event_id: eventId }),
+              });
+
+              if (response.ok) return true;
+              return false;
+            } catch (error) {
+              return false;
+            }
+          })
+        ).then(results => results.filter(Boolean).length);
+
+        // Refresh members list
+        fetchMembers();
+
+        // Show summary
+        let message = `Successfully imported ${successCount} member(s).`;
+        if (skipped.length > 0) {
+          message += `\n\nSkipped ${skipped.length} duplicate(s):\n${skipped.slice(0, 5).join('\n')}`;
+          if (skipped.length > 5) {
+            message += `\n... and ${skipped.length - 5} more`;
+          }
+        }
+        alert(message);
+      } else {
+        alert('No new members to import. All entries already exist.');
+      }
+    } catch (error) {
+      console.error('CSV upload error:', error);
+      alert('Failed to process CSV file. Please check the format and try again.');
+    }
+
     // Reset input
     e.target.value = '';
   };
@@ -123,31 +312,27 @@ export default function MembersPage() {
           </Button>
           
           <DropdownMenu>
-            <DropdownMenuTrigger>
-              <Button 
-                variant="outline" 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowCSVDropdown(!showCSVDropdown);
-                }}
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                CSV
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <FileText className="mr-2 h-4 w-4" />
+                Manage Data
                 <ChevronDown className="ml-2 h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            {showCSVDropdown && (
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleDownloadTemplate}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Template
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => document.getElementById('csv-upload')?.click()}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Data
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            )}
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={handleDownloadTemplate}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Template
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={handleDownloadData}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Data
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => document.getElementById('csv-upload')?.click()}>
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Data
+              </DropdownMenuItem>
+            </DropdownMenuContent>
           </DropdownMenu>
           
           <input
@@ -165,7 +350,7 @@ export default function MembersPage() {
         </div>
       </div>
 
-      {/* Search Bar */}
+      {/* Search Bar and Filters */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -176,24 +361,74 @@ export default function MembersPage() {
             className="pl-10"
           />
         </div>
-        {searchQuery && (
-          <Button variant="ghost" onClick={() => setSearchQuery("")}>
+        
+        {/* KYC Filter */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">
+              <FileCheck className="mr-2 h-4 w-4" />
+              {kycFilter === "all" && "All Members"}
+              {kycFilter === "completed" && "KYC Completed"}
+              {kycFilter === "pending" && "KYC Pending"}
+              <ChevronDown className="ml-2 h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setKycFilter("all")}>
+              All Members
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setKycFilter("completed")}>
+              KYC Completed
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setKycFilter("pending")}>
+              KYC Pending
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        
+        {(searchQuery || kycFilter !== "all") && (
+          <Button variant="ghost" onClick={() => { setSearchQuery(""); setKycFilter("all"); }}>
             Clear
           </Button>
         )}
       </div>
 
-      {/* Members Count */}
-      <div className="flex items-center gap-2 text-sm text-slate-600">
-        <User className="h-4 w-4" />
-        <span>
-          {filteredMembers.length} {filteredMembers.length === 1 ? "member" : "members"}
-          {searchQuery && ` (filtered from ${members.length})`}
-        </span>
+      {/* Members Count with KYC Stats */}
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2 text-sm text-slate-600">
+          <User className="h-4 w-4" />
+          <span>
+            {filteredMembers.length} {filteredMembers.length === 1 ? "member" : "members"}
+            {(searchQuery || kycFilter !== "all") && ` (filtered from ${members.length})`}
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <FileCheck className="h-4 w-4 text-green-600" />
+            <span className="text-slate-600">
+              KYC Completed: <span className="font-semibold text-green-600">{kycStats.completed}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <X className="h-4 w-4 text-orange-600" />
+            <span className="text-slate-600">
+              KYC Pending: <span className="font-semibold text-orange-600">{kycStats.pending}</span>
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Members Table */}
-      {filteredMembers.length > 0 ? (
+      {loading ? (
+        <Card>
+          <CardContent className="p-12">
+            <div className="flex flex-col items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-slate-400 mb-4" />
+              <p className="text-slate-500">Loading members...</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : filteredMembers.length > 0 ? (
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -212,13 +447,16 @@ export default function MembersPage() {
                     <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
                       Phone
                     </th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      KYC Status
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-200">
                   {filteredMembers.map((member) => (
                     <tr
                       key={member.id}
-                      onClick={() => handleEditMember(member)}
+                      onClick={() => handleViewMember(member)}
                       className="hover:bg-slate-50 cursor-pointer transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -241,8 +479,21 @@ export default function MembersPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center text-sm text-slate-600">
                           <Phone className="h-4 w-4 mr-2 text-slate-400" />
-                          {member.phone}
+                          {member.country_code} {member.phone}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {member.kyc_document_type && member.kyc_document_type.trim() !== "" ? (
+                          <Badge variant="default" className="bg-green-100 text-green-700 hover:bg-green-100">
+                            <FileCheck className="h-3 w-3 mr-1" />
+                            Completed
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-orange-100 text-orange-700 hover:bg-orange-100">
+                            <X className="h-3 w-3 mr-1" />
+                            Pending
+                          </Badge>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -282,6 +533,14 @@ export default function MembersPage() {
         member={editingMember}
         eventId={eventId}
         onSave={handleSaveMember}
+      />
+
+      {/* Member Details Dialog */}
+      <MemberDetailsDialog
+        isOpen={isDetailsDialogOpen}
+        onClose={() => setIsDetailsDialogOpen(false)}
+        member={viewingMember}
+        onEdit={handleEditFromDetails}
       />
 
       {/* Registration Link Dialog */}

@@ -13,13 +13,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { AddressInput } from "@/components/ui/address-input";
 
 interface POC {
   name: string;
+  country_code: string;
   phone: string;
   email: string;
   designation: string;
-  isPrimary?: boolean;
+  is_primary?: boolean;
 }
 
 interface PartnerDialogProps {
@@ -35,16 +38,17 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
     address_lane: "",
     city: "",
     state: "",
-    country: "",
+    country: "IN", // Default to India
     pincode: "",
     industry_type: "",
     company_size: "",
     logo_url: "",
     website: "",
+    tax_number: "",
   });
 
   const [pocs, setPocs] = useState<POC[]>([
-    { name: "", phone: "", email: "", designation: "", isPrimary: true }
+    { name: "", country_code: "+91", phone: "", email: "", designation: "", is_primary: true }
   ]);
 
   useEffect(() => {
@@ -54,22 +58,27 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
         address_lane: partner.address_lane || "",
         city: partner.city || "",
         state: partner.state || "",
-        country: partner.country || "",
+        country: partner.country || "IN",
         pincode: partner.pincode || "",
         industry_type: partner.industry_type || "",
         company_size: partner.company_size || "",
         logo_url: partner.logo_url || "",
         website: partner.website || "",
+        tax_number: partner.tax_number || "",
       });
       
       // Set POCs from partner data
       if (partner.pocs && partner.pocs.length > 0) {
-        setPocs(partner.pocs.map((poc: POC, index: number) => ({
-          ...poc,
-          isPrimary: poc.isPrimary || index === 0
+        setPocs(partner.pocs.map((poc: any, index: number) => ({
+          name: poc.name || "",
+          country_code: poc.country_code || "+91",
+          phone: poc.phone || "",
+          email: poc.email || "",
+          designation: poc.designation || "",
+          is_primary: poc.is_primary || index === 0
         })));
       } else {
-        setPocs([{ name: "", phone: "", email: "", designation: "", isPrimary: true }]);
+        setPocs([{ name: "", country_code: "+91", phone: "", email: "", designation: "", is_primary: true }]);
       }
     } else {
       setFormData({
@@ -77,19 +86,20 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
         address_lane: "",
         city: "",
         state: "",
-        country: "",
+        country: "IN",
         pincode: "",
         industry_type: "",
         company_size: "",
         logo_url: "",
         website: "",
+        tax_number: "",
       });
-      setPocs([{ name: "", phone: "", email: "", designation: "", isPrimary: true }]);
+      setPocs([{ name: "", country_code: "+91", phone: "", email: "", designation: "", is_primary: true }]);
     }
   }, [partner]);
 
   const handleAddPOC = () => {
-    setPocs([...pocs, { name: "", phone: "", email: "", designation: "", isPrimary: false }]);
+    setPocs([...pocs, { name: "", country_code: "+91", phone: "", email: "", designation: "", is_primary: false }]);
   };
 
   const handleRemovePOC = (index: number) => {
@@ -98,8 +108,8 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
       const remainingPocs = pocs.filter((_, i) => i !== index);
       
       // If removing the primary POC, set the first remaining POC as primary
-      if (pocToRemove.isPrimary && remainingPocs.length > 0) {
-        remainingPocs[0].isPrimary = true;
+      if (pocToRemove.is_primary && remainingPocs.length > 0) {
+        remainingPocs[0].is_primary = true;
       }
       
       setPocs(remainingPocs);
@@ -115,7 +125,7 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
   const handleSetPrimaryPOC = (index: number) => {
     const newPocs = pocs.map((poc, i) => ({
       ...poc,
-      isPrimary: i === index
+      is_primary: i === index
     }));
     setPocs(newPocs);
   };
@@ -140,9 +150,8 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
       company_size: formData.company_size,
       logo_url: formData.logo_url,
       website: formData.website,
+      tax_number: formData.tax_number,
       pocs: validPocs,
-      status: partner?.status || "active", // Keep existing status or set as active
-      ...(partner && { events_count: partner.events_count }),
     };
 
     onSubmit(partnerData);
@@ -216,6 +225,16 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
                     placeholder="https://example.com/logo.png"
                   />
                 </div>
+                
+                <div className="col-span-2">
+                  <Label htmlFor="tax_number">Tax Number (GST/VAT/TIN/EIN)</Label>
+                  <Input
+                    id="tax_number"
+                    value={formData.tax_number}
+                    onChange={(e) => setFormData({ ...formData, tax_number: e.target.value })}
+                    placeholder="Enter tax identification number"
+                  />
+                </div>
               </div>
             </div>
 
@@ -223,52 +242,21 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-slate-900">Address</h3>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="country">Country</Label>
-                  <Input
-                    id="country"
-                    value={formData.country}
-                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="pincode">Pincode</Label>
-                  <Input
-                    id="pincode"
-                    value={formData.pincode}
-                    onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="state">State</Label>
-                  <Input
-                    id="state"
-                    value={formData.state}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <Label htmlFor="address_lane">Street Address</Label>
-                  <Input
-                    id="address_lane"
-                    value={formData.address_lane}
-                    onChange={(e) => setFormData({ ...formData, address_lane: e.target.value })}
-                  />
-                </div>
-              </div>
+              <AddressInput
+                country={formData.country}
+                pincode={formData.pincode}
+                state={formData.state}
+                city={formData.city}
+                addressLane={formData.address_lane}
+                onCountryChange={(value) => {
+                  console.log('Partner dialog updating country to:', value);
+                  setFormData(prev => ({ ...prev, country: value }));
+                }}
+                onPincodeChange={(value) => setFormData(prev => ({ ...prev, pincode: value }))}
+                onStateChange={(value) => setFormData(prev => ({ ...prev, state: value }))}
+                onCityChange={(value) => setFormData(prev => ({ ...prev, city: value }))}
+                onAddressLaneChange={(value) => setFormData(prev => ({ ...prev, address_lane: value }))}
+              />
             </div>
 
             {/* Points of Contact */}
@@ -287,7 +275,7 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
               </div>
               
               {pocs.map((poc, index) => (
-                <div key={index} className={`border rounded-lg p-4 space-y-4 relative ${poc.isPrimary ? 'border-primary bg-primary/5' : ''}`}>
+                <div key={index} className={`border rounded-lg p-4 space-y-4 relative ${poc.is_primary ? 'border-primary bg-primary/5' : ''}`}>
                   {pocs.length > 1 && (
                     <Button
                       type="button"
@@ -305,13 +293,13 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
                       <span className="text-xs font-medium text-slate-500">
                         Contact {index + 1}
                       </span>
-                      {poc.isPrimary && (
+                      {poc.is_primary && (
                         <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-medium">
                           Primary
                         </span>
                       )}
                     </div>
-                    {!poc.isPrimary && pocs.length > 1 && (
+                    {!poc.is_primary && pocs.length > 1 && (
                       <Button
                         type="button"
                         variant="outline"
@@ -343,7 +331,7 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
                       />
                     </div>
 
-                    <div>
+                    <div className="col-span-2">
                       <Label htmlFor={`poc_email_${index}`}>Email</Label>
                       <Input
                         id={`poc_email_${index}`}
@@ -353,15 +341,14 @@ export function PartnerDialog({ open, onOpenChange, partner, onSubmit }: Partner
                       />
                     </div>
 
-                    <div>
-                      <Label htmlFor={`poc_phone_${index}`}>Phone (10 digits)</Label>
-                      <Input
+                    <div className="col-span-2">
+                      <PhoneInput
+                        countryCode={poc.country_code}
+                        phoneNumber={poc.phone}
+                        onCountryCodeChange={(code) => handlePOCChange(index, "country_code", code)}
+                        onPhoneNumberChange={(number) => handlePOCChange(index, "phone", number)}
+                        label="Phone Number"
                         id={`poc_phone_${index}`}
-                        type="tel"
-                        value={poc.phone}
-                        onChange={(e) => handlePOCChange(index, "phone", e.target.value)}
-                        placeholder="1234567890"
-                        maxLength={10}
                       />
                     </div>
                   </div>

@@ -1,54 +1,116 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Building2, Mail, Phone, Globe, MapPin, Search, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPartnersWithEventCount } from "@/lib/mock-data";
 import { PartnerDialog } from "@/components/partner-dialog";
 
 export default function PartnersPage() {
   const router = useRouter();
-  const [allPartners, setAllPartners] = useState(getPartnersWithEventCount());
+  const [allPartners, setAllPartners] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPartner, setEditingPartner] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Filter to show only active partners (soft delete)
-  const partners = allPartners.filter(p => p.status === "active");
+  // Fetch partners from database
+  useEffect(() => {
+    fetchPartners();
+  }, []);
 
-  const handleAddPartner = (newPartner: any) => {
-    const partnerWithId = {
-      ...newPartner,
-      id: `partner-${Date.now()}`,
-      status: "active", // Always active for new partners
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      events_count: 0,
-    };
-    setAllPartners([...allPartners, partnerWithId]);
-    setIsDialogOpen(false);
+  const fetchPartners = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/partners');
+      const data = await response.json();
+      
+      if (response.ok) {
+        setAllPartners(data.partners);
+      } else {
+        console.error('Failed to fetch partners:', data.message);
+      }
+    } catch (error) {
+      console.error('Failed to fetch partners:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleEditPartner = (updatedPartner: any) => {
-    setAllPartners(allPartners.map(p => 
-      p.id === updatedPartner.id 
-        ? { ...updatedPartner, updated_at: new Date().toISOString() }
-        : p
-    ));
-    setEditingPartner(null);
-    setIsDialogOpen(false);
+  // All partners are active (is_active = true from DB)
+  const partners = allPartners;
+
+  const handleAddPartner = async (newPartner: any) => {
+    try {
+      const response = await fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPartner),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Refresh partners list
+        await fetchPartners();
+        setIsDialogOpen(false);
+      } else {
+        alert(data.message || 'Failed to create partner');
+      }
+    } catch (error) {
+      console.error('Failed to create partner:', error);
+      alert('Failed to create partner. Please try again.');
+    }
   };
 
-  const handleDeletePartner = (partnerId: string) => {
-    // Soft delete: mark as inactive instead of removing
-    setAllPartners(allPartners.map(p =>
-      p.id === partnerId
-        ? { ...p, status: "inactive", updated_at: new Date().toISOString() }
-        : p
-    ));
+  const handleEditPartner = async (updatedPartner: any) => {
+    try {
+      const response = await fetch(`/api/partners/${updatedPartner.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPartner),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Refresh partners list
+        await fetchPartners();
+        setEditingPartner(null);
+        setIsDialogOpen(false);
+      } else {
+        alert(data.message || 'Failed to update partner');
+      }
+    } catch (error) {
+      console.error('Failed to update partner:', error);
+      alert('Failed to update partner. Please try again.');
+    }
+  };
+
+  const handleDeletePartner = async (partnerId: string) => {
+    if (!confirm('Are you sure you want to delete this partner?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/partners/${partnerId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Refresh partners list
+        await fetchPartners();
+      } else {
+        alert(data.message || 'Failed to delete partner');
+      }
+    } catch (error) {
+      console.error('Failed to delete partner:', error);
+      alert('Failed to delete partner. Please try again.');
+    }
   };
 
   const handleOpenDialog = (partner?: any) => {
@@ -129,8 +191,15 @@ export default function PartnersPage() {
         />
       </div>
 
-      {/* Partners Grid */}
-      {filteredPartners.length === 0 ? (
+      {/* Loading State */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-500">Loading partners...</p>
+          </div>
+        </div>
+      ) : filteredPartners.length === 0 ? (
         <Card className="p-12">
           <div className="text-center">
             <Building2 className="h-12 w-12 mx-auto text-slate-300 mb-4" />
@@ -178,8 +247,8 @@ export default function PartnersPage() {
             <CardContent className="space-y-3">
               {partner.pocs && partner.pocs.length > 0 && (() => {
                 // Show primary POC first, or first POC if no primary is set
-                const primaryPOC = partner.pocs.find((poc: any) => poc.isPrimary) || partner.pocs[0];
-                const isPrimary = primaryPOC?.isPrimary || false;
+                const primaryPOC = partner.pocs.find((poc: any) => poc.is_primary) || partner.pocs[0];
+                const isPrimary = primaryPOC?.is_primary || false;
                 return (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -201,10 +270,12 @@ export default function PartnersPage() {
                         <Mail className="h-4 w-4 mr-2 text-slate-500 flex-shrink-0" />
                         <span className="truncate">{primaryPOC.email}</span>
                       </div>
-                      <div className="flex items-center text-sm text-slate-600">
-                        <Phone className="h-4 w-4 mr-2 text-slate-500 flex-shrink-0" />
-                        <span>{primaryPOC.phone}</span>
-                      </div>
+                      {primaryPOC.phone && (
+                        <div className="flex items-center text-sm text-slate-600">
+                          <Phone className="h-4 w-4 mr-2 text-slate-500 flex-shrink-0" />
+                          <span>{primaryPOC.country_code} {primaryPOC.phone}</span>
+                        </div>
+                      )}
                     </div>
                     {partner.pocs.length > 1 && (
                       <div className="text-xs text-slate-500 italic pt-1">
@@ -231,14 +302,16 @@ export default function PartnersPage() {
                 </div>
               )}
 
-              <div className="pt-2 border-t">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Events</span>
-                  <span className="font-semibold text-slate-900">
-                    {partner.events_count}
-                  </span>
+              {partner.tax_number && (
+                <div className="pt-2 border-t">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">Tax Number</span>
+                    <span className="font-mono text-xs text-slate-900">
+                      {partner.tax_number}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         ))}

@@ -24,6 +24,7 @@ export default function EventProfilePage() {
     end_date: "",
   });
 
+  // Only run when eventId changes, not eventData (which is a new object on each render)
   useEffect(() => {
     if (eventData) {
       const { partner, ...event } = eventData;
@@ -36,7 +37,8 @@ export default function EventProfilePage() {
         end_date: event.end_date || "",
       });
     }
-  }, [eventId, eventData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
 
   const handleSave = () => {
     // TODO: Save the updated event data

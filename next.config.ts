@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
         hostname: 'cdn-sleepyhug-prod.b-cdn.net',
         pathname: '/media/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'iba-consulting-prod.b-cdn.net',
+        pathname: '/gj-logos/**',
+      },
     ],
   },
 };

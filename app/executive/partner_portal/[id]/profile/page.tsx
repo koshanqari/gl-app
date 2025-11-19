@@ -7,66 +7,95 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPartnersWithEventCount } from "@/lib/mock-data";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { AddressInput } from "@/components/ui/address-input";
 
 interface POC {
   name: string;
+  country_code: string;
   phone: string;
   email: string;
   designation: string;
-  isPrimary?: boolean;
+  is_primary?: boolean;
 }
 
 export default function PartnerProfilePage() {
   const params = useParams();
   const partnerId = params.id as string;
 
-  const partner = getPartnersWithEventCount().find(p => p.id === partnerId);
+  const [partner, setPartner] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     company_name: "",
     address_lane: "",
     city: "",
     state: "",
-    country: "",
+    country: "IN",
     pincode: "",
     industry_type: "",
     company_size: "",
     logo_url: "",
     website: "",
+    tax_number: "",
   });
 
   const [pocs, setPocs] = useState<POC[]>([
-    { name: "", phone: "", email: "", designation: "", isPrimary: true }
+    { name: "", country_code: "+91", phone: "", email: "", designation: "", is_primary: true }
   ]);
 
   useEffect(() => {
-    if (partner) {
-      setFormData({
-        company_name: partner.company_name || "",
-        address_lane: partner.address_lane || "",
-        city: partner.city || "",
-        state: partner.state || "",
-        country: partner.country || "",
-        pincode: partner.pincode || "",
-        industry_type: partner.industry_type || "",
-        company_size: partner.company_size || "",
-        logo_url: partner.logo_url || "",
-        website: partner.website || "",
-      });
-
-      if (partner.pocs && partner.pocs.length > 0) {
-        setPocs(partner.pocs.map((poc: POC, index: number) => ({
-          ...poc,
-          isPrimary: poc.isPrimary || index === 0
-        })));
-      }
-    }
+    fetchPartner();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partnerId]);
 
+  const fetchPartner = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/partners/${partnerId}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        const partnerData = data.partner;
+        setPartner(partnerData);
+        
+        setFormData({
+          company_name: partnerData.company_name || "",
+          address_lane: partnerData.address_lane || "",
+          city: partnerData.city || "",
+          state: partnerData.state || "",
+          country: partnerData.country || "IN",
+          pincode: partnerData.pincode || "",
+          industry_type: partnerData.industry_type || "",
+          company_size: partnerData.company_size || "",
+          logo_url: partnerData.logo_url || "",
+          website: partnerData.website || "",
+          tax_number: partnerData.tax_number || "",
+        });
+
+        if (partnerData.pocs && partnerData.pocs.length > 0) {
+          setPocs(partnerData.pocs.map((poc: any, index: number) => ({
+            name: poc.name || "",
+            country_code: poc.country_code || "+91",
+            phone: poc.phone || "",
+            email: poc.email || "",
+            designation: poc.designation || "",
+            is_primary: poc.is_primary || index === 0
+          })));
+        }
+      } else {
+        console.error('Failed to fetch partner:', data.message);
+      }
+    } catch (error) {
+      console.error('Failed to fetch partner:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAddPOC = () => {
-    setPocs([...pocs, { name: "", phone: "", email: "", designation: "", isPrimary: false }]);
+    setPocs([...pocs, { name: "", country_code: "+91", phone: "", email: "", designation: "", is_primary: false }]);
   };
 
   const handleRemovePOC = (index: number) => {
@@ -74,8 +103,8 @@ export default function PartnerProfilePage() {
       const pocToRemove = pocs[index];
       const remainingPocs = pocs.filter((_, i) => i !== index);
       
-      if (pocToRemove.isPrimary && remainingPocs.length > 0) {
-        remainingPocs[0].isPrimary = true;
+      if (pocToRemove.is_primary && remainingPocs.length > 0) {
+        remainingPocs[0].is_primary = true;
       }
       
       setPocs(remainingPocs);
@@ -91,16 +120,56 @@ export default function PartnerProfilePage() {
   const handleSetPrimaryPOC = (index: number) => {
     const newPocs = pocs.map((poc, i) => ({
       ...poc,
-      isPrimary: i === index
+      is_primary: i === index
     }));
     setPocs(newPocs);
   };
 
-  const handleSave = () => {
-    // TODO: Save the updated partner data
-    console.log("Saving partner data:", { ...formData, pocs });
-    alert("Profile saved! (This will be connected to backend)");
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      
+      // Filter out empty POCs
+      const validPocs = pocs.filter(poc => 
+        poc.name.trim() || poc.phone.trim() || poc.email.trim() || poc.designation.trim()
+      );
+
+      const response = await fetch(`/api/partners/${partnerId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: partnerId,
+          ...formData,
+          pocs: validPocs,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert("Profile saved successfully!");
+        await fetchPartner(); // Refresh data
+      } else {
+        alert(data.message || 'Failed to save profile');
+      }
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+      alert('Failed to save profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-500">Loading partner profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!partner) {
     return (
@@ -122,9 +191,9 @@ export default function PartnerProfilePage() {
             View and manage partner information
           </p>
         </div>
-        <Button onClick={handleSave}>
+        <Button onClick={handleSave} disabled={saving}>
           <Save className="mr-2 h-4 w-4" />
-          Save Changes
+          {saving ? "Saving..." : "Save Changes"}
         </Button>
       </div>
 
@@ -186,6 +255,16 @@ export default function PartnerProfilePage() {
                 placeholder="https://example.com/logo.png"
               />
             </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="tax_number">Tax Number (GST/VAT/TIN/EIN)</Label>
+              <Input
+                id="tax_number"
+                value={formData.tax_number}
+                onChange={(e) => setFormData({ ...formData, tax_number: e.target.value })}
+                placeholder="Enter tax identification number"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -196,52 +275,18 @@ export default function PartnerProfilePage() {
           <CardTitle>Address</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="pincode">Pincode</Label>
-              <Input
-                id="pincode"
-                value={formData.pincode}
-                onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="state">State</Label>
-              <Input
-                id="state"
-                value={formData.state}
-                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="city">City</Label>
-              <Input
-                id="city"
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              />
-            </div>
-
-            <div className="col-span-2">
-              <Label htmlFor="address_lane">Street Address</Label>
-              <Input
-                id="address_lane"
-                value={formData.address_lane}
-                onChange={(e) => setFormData({ ...formData, address_lane: e.target.value })}
-              />
-            </div>
-          </div>
+          <AddressInput
+            country={formData.country}
+            pincode={formData.pincode}
+            state={formData.state}
+            city={formData.city}
+            addressLane={formData.address_lane}
+            onCountryChange={(value) => setFormData(prev => ({ ...prev, country: value }))}
+            onPincodeChange={(value) => setFormData(prev => ({ ...prev, pincode: value }))}
+            onStateChange={(value) => setFormData(prev => ({ ...prev, state: value }))}
+            onCityChange={(value) => setFormData(prev => ({ ...prev, city: value }))}
+            onAddressLaneChange={(value) => setFormData(prev => ({ ...prev, address_lane: value }))}
+          />
         </CardContent>
       </Card>
 
@@ -262,7 +307,7 @@ export default function PartnerProfilePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {pocs.map((poc, index) => (
-            <div key={index} className={`border rounded-lg p-4 space-y-4 relative ${poc.isPrimary ? 'border-primary bg-primary/5' : ''}`}>
+            <div key={index} className={`border rounded-lg p-4 space-y-4 relative ${poc.is_primary ? 'border-primary bg-primary/5' : ''}`}>
               {pocs.length > 1 && (
                 <Button
                   type="button"
@@ -280,13 +325,13 @@ export default function PartnerProfilePage() {
                   <span className="text-xs font-medium text-slate-500">
                     Contact {index + 1}
                   </span>
-                  {poc.isPrimary && (
+                  {poc.is_primary && (
                     <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-medium">
                       Primary
                     </span>
                   )}
                 </div>
-                {!poc.isPrimary && pocs.length > 1 && (
+                {!poc.is_primary && pocs.length > 1 && (
                   <Button
                     type="button"
                     variant="outline"
@@ -318,7 +363,7 @@ export default function PartnerProfilePage() {
                   />
                 </div>
 
-                <div>
+                <div className="col-span-2">
                   <Label htmlFor={`poc_email_${index}`}>Email</Label>
                   <Input
                     id={`poc_email_${index}`}
@@ -328,15 +373,14 @@ export default function PartnerProfilePage() {
                   />
                 </div>
 
-                <div>
-                  <Label htmlFor={`poc_phone_${index}`}>Phone (10 digits)</Label>
-                  <Input
+                <div className="col-span-2">
+                  <PhoneInput
+                    countryCode={poc.country_code}
+                    phoneNumber={poc.phone}
+                    onCountryCodeChange={(code) => handlePOCChange(index, "country_code", code)}
+                    onPhoneNumberChange={(number) => handlePOCChange(index, "phone", number)}
+                    label="Phone Number"
                     id={`poc_phone_${index}`}
-                    type="tel"
-                    value={poc.phone}
-                    onChange={(e) => handlePOCChange(index, "phone", e.target.value)}
-                    placeholder="1234567890"
-                    maxLength={10}
                   />
                 </div>
               </div>

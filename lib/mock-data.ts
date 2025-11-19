@@ -384,6 +384,9 @@ export const mockMembers = [
     name: "Alice Johnson",
     email: "alice.johnson@techinnovations.com",
     phone: "4155551001",
+    kyc_document_type: "aadhaar",
+    kyc_document_number: "1234-5678-9012",
+    kyc_document_url: "https://example.com/documents/alice_aadhaar.pdf",
     status: "active",
     created_at: new Date("2024-02-01").toISOString(),
     updated_at: new Date("2024-02-01").toISOString(),
@@ -395,6 +398,9 @@ export const mockMembers = [
     name: "Bob Smith",
     email: "bob.smith@techinnovations.com",
     phone: "4155551002",
+    kyc_document_type: "pan",
+    kyc_document_number: "ABCDE1234F",
+    kyc_document_url: "https://example.com/documents/bob_pan.pdf",
     status: "active",
     created_at: new Date("2024-02-02").toISOString(),
     updated_at: new Date("2024-02-02").toISOString(),
@@ -418,6 +424,9 @@ export const mockMembers = [
     name: "David Brown",
     email: "david.brown@techinnovations.com",
     phone: "4155551004",
+    kyc_document_type: "passport",
+    kyc_document_number: "P12345678",
+    kyc_document_url: "https://example.com/documents/david_passport.pdf",
     status: "active",
     created_at: new Date("2024-02-05").toISOString(),
     updated_at: new Date("2024-02-05").toISOString(),
@@ -438,6 +447,132 @@ export const mockMembers = [
 // Helper function to get members by event ID
 export const getMembersByEventId = (eventId: string) => {
   return mockMembers.filter((member) => member.event_id === eventId && member.status === "active");
+};
+
+// Hotels mock data (one per event)
+export const mockHotels = [
+  {
+    id: "hotel-1",
+    event_id: "event-1",
+    hotel_name: "Grand Plaza Hotel",
+    address_street: "456 Convention Center Drive",
+    city: "San Francisco",
+    state: "California",
+    country: "USA",
+    pincode: "94103",
+    maps_link: "https://maps.google.com/?q=Grand+Plaza+Hotel+San+Francisco",
+    website: "https://www.grandplazahotel.com",
+    pocs: [
+      {
+        name: "Michael Chen",
+        phone: "4155559000",
+        email: "reservations@grandplaza.com",
+        poc_for: "Reservations & Check-in",
+        display_for_members: true,
+      },
+      {
+        name: "Sarah Williams",
+        phone: "4155559001",
+        email: "events@grandplaza.com",
+        poc_for: "Event Coordination",
+        display_for_members: false,
+      },
+    ],
+    star_rating: 5,
+    image_url: "",
+    amenities: ["WiFi", "Swimming Pool", "Gym", "Restaurant", "Bar", "Conference Rooms", "Parking", "Airport Shuttle", "Spa", "Room Service", "24/7 Reception", "Laundry Service"],
+    additional_details: "Early check-in available upon request. Complimentary airport shuttle service every hour.",
+    created_at: new Date("2024-01-15").toISOString(),
+    updated_at: new Date("2024-01-15").toISOString(),
+  },
+  {
+    id: "hotel-2",
+    event_id: "event-2",
+    hotel_name: "Luxury Business Suites",
+    address_street: "789 Market Street",
+    city: "San Francisco",
+    state: "California",
+    country: "USA",
+    pincode: "94102",
+    maps_link: "https://maps.google.com/?q=Luxury+Business+Suites+San+Francisco",
+    website: "https://www.luxurybusinesssuites.com",
+    pocs: [
+      {
+        name: "Sarah Johnson",
+        phone: "4155559100",
+        email: "contact@luxurysuites.com",
+        poc_for: "General Inquiries",
+        display_for_members: true,
+      },
+    ],
+    star_rating: 4,
+    image_url: "",
+    amenities: ["WiFi", "Gym", "Restaurant", "Conference Rooms", "Parking", "Room Service", "24/7 Reception"],
+    additional_details: "Business center available 24/7. Flexible check-out times for extended stays.",
+    created_at: new Date("2024-03-10").toISOString(),
+    updated_at: new Date("2024-03-10").toISOString(),
+  },
+];
+
+// Room assignments mock data
+export const mockRoomAssignments = [
+  {
+    id: "assignment-1",
+    event_id: "event-1",
+    member_id: "member-1",
+    room_number: "205",
+    room_type: "Double",
+    check_in_date: "2024-05-14",
+    check_out_date: "2024-05-17",
+    sharing_with_member_id: "member-2",
+    special_requests: "High floor preferred",
+    status: "assigned",
+    created_at: new Date("2024-02-10").toISOString(),
+    updated_at: new Date("2024-02-10").toISOString(),
+  },
+  {
+    id: "assignment-2",
+    event_id: "event-1",
+    member_id: "member-2",
+    room_number: "205",
+    room_type: "Double",
+    check_in_date: "2024-05-14",
+    check_out_date: "2024-05-17",
+    sharing_with_member_id: "member-1",
+    special_requests: "",
+    status: "assigned",
+    created_at: new Date("2024-02-10").toISOString(),
+    updated_at: new Date("2024-02-10").toISOString(),
+  },
+  {
+    id: "assignment-3",
+    event_id: "event-1",
+    member_id: "member-3",
+    room_number: "308",
+    room_type: "Single",
+    check_in_date: "2024-05-14",
+    check_out_date: "2024-05-17",
+    sharing_with_member_id: null,
+    special_requests: "Early check-in requested",
+    status: "assigned",
+    created_at: new Date("2024-02-11").toISOString(),
+    updated_at: new Date("2024-02-11").toISOString(),
+  },
+];
+
+// Helper function to get hotel by event ID
+export const getHotelByEventId = (eventId: string) => {
+  return mockHotels.find((hotel) => hotel.event_id === eventId) || null;
+};
+
+// Helper function to get room assignments by event ID
+export const getRoomAssignmentsByEventId = (eventId: string) => {
+  return mockRoomAssignments.filter((assignment) => assignment.event_id === eventId && assignment.status === "assigned");
+};
+
+// Helper function to get room assignment for a specific member
+export const getRoomAssignmentByMemberId = (memberId: string) => {
+  return mockRoomAssignments.find((assignment) => assignment.member_id === memberId && assignment.status === "assigned") || null;
 };
 
 // Calculate events count for each partner

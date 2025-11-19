@@ -4,6 +4,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Building2, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ExecutiveFooter } from "@/components/executive-footer";
+import { getExecutiveSession, clearExecutiveSession, setRedirectUrl } from "@/lib/auth-cookies";
 
 export default function ExecutiveLayout({
   children,
@@ -17,17 +19,18 @@ export default function ExecutiveLayout({
   useEffect(() => {
     // Check if user is logged in
     if (pathname !== "/executive/login") {
-      const session = localStorage.getItem("executive-session");
+      const session = getExecutiveSession();
       if (!session) {
+        setRedirectUrl(pathname);
         router.push("/executive/login");
       } else {
-        setExecutive(JSON.parse(session));
+        setExecutive(session);
       }
     }
   }, [pathname, router]);
 
   const handleLogout = () => {
-    localStorage.removeItem("executive-session");
+    clearExecutiveSession();
     router.push("/executive/login");
   };
 
@@ -110,6 +113,9 @@ export default function ExecutiveLayout({
           {children}
         </main>
       </div>
+
+      {/* Footer */}
+      <ExecutiveFooter />
     </div>
   );
 }
