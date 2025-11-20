@@ -49,7 +49,7 @@ export default function MemberProfilePage() {
   useEffect(() => {
     // Get member session and fetch real data
     const fetchMemberData = async () => {
-      const member = getMemberSession();
+    const member = getMemberSession();
       if (!member) {
         setIsLoading(false);
         return;
@@ -64,22 +64,22 @@ export default function MemberProfilePage() {
           // Find the member by email
           const memberRecord = data.members.find(
             (m: any) => m.email === member.email
-          );
-
-          if (memberRecord) {
-            setMemberData(memberRecord);
-            setFormData({
-              name: memberRecord.name,
-              email: memberRecord.email,
-              phone: memberRecord.phone,
-              employee_id: memberRecord.employee_id,
+      );
+      
+      if (memberRecord) {
+        setMemberData(memberRecord);
+        setFormData({
+          name: memberRecord.name,
+          email: memberRecord.email,
+          phone: memberRecord.phone,
+          employee_id: memberRecord.employee_id,
               country_code: memberRecord.country_code || "+91",
-              kyc_document_type: memberRecord.kyc_document_type || "",
-              kyc_document_number: memberRecord.kyc_document_number || "",
+          kyc_document_type: memberRecord.kyc_document_type || "",
+          kyc_document_number: memberRecord.kyc_document_number || "",
               kyc_document_url: memberRecord.kyc_document_url || "",
-            });
-          }
-        }
+        });
+      }
+    }
       } catch (error) {
         console.error('Failed to fetch member data:', error);
       } finally {
@@ -116,7 +116,7 @@ export default function MemberProfilePage() {
           kyc_document_number: data.member.kyc_document_number || "",
           kyc_document_url: data.member.kyc_document_url || "",
         });
-        setIsEditing(false);
+    setIsEditing(false);
       } else {
         console.error('Failed to update profile:', data.message);
         alert(`Failed to update profile: ${data.message}`);
@@ -256,11 +256,11 @@ export default function MemberProfilePage() {
                 {(memberData.kyc_document_type || formData.kyc_document_type) && 
                  (memberData.kyc_document_number || formData.kyc_document_number) && 
                  (memberData.kyc_document_url || formData.kyc_document_url) ? (
-                  <div className="px-3 py-1 rounded-full bg-green-50 border border-green-200">
+              <div className="px-3 py-1 rounded-full bg-green-50 border border-green-200">
                     <span className="text-xs font-semibold text-green-700">Complete</span>
-                  </div>
-                ) : (
-                  <div className="px-3 py-1 rounded-full bg-orange-50 border border-orange-200">
+              </div>
+            ) : (
+              <div className="px-3 py-1 rounded-full bg-orange-50 border border-orange-200">
                     <span className="text-xs font-semibold text-orange-700">Incomplete</span>
                   </div>
                 )}

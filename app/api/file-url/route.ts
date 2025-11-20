@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getPresignedDownloadUrl } from '@/lib/s3';
 import { cookies } from 'next/headers';
+import { checkAuth } from '@/lib/auth-helpers';
 
 // GET signed URL for viewing a file
 export async function GET(request: Request) {
   try {
-    // Check authentication (executive or member)
+    // Check authentication (executive, collaborator, or member)
+    const auth = await checkAuth();
     const cookieStore = await cookies();
-    const executiveSession = cookieStore.get('executive-session')?.value;
     const memberSession = cookieStore.get('member-session')?.value;
 
-    if (!executiveSession && !memberSession) {
+    if (!auth.isAuthenticated && !memberSession) {
       return NextResponse.json(
         {
           status: 'error',

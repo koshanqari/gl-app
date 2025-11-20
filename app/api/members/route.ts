@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { cookies } from 'next/headers';
+import { checkPermission } from '@/lib/auth-helpers';
 
 // GET all members or members by event_id
 export async function GET(request: Request) {
@@ -61,17 +61,6 @@ export async function GET(request: Request) {
 // POST create new member
 export async function POST(request: Request) {
   try {
-    // Get session from cookies (server-side)
-    const cookieStore = await cookies();
-    const executiveSession = cookieStore.get('executive-session')?.value;
-    
-    if (!executiveSession) {
-      return NextResponse.json({
-        status: 'error',
-        message: 'Unauthorized - No session found',
-      }, { status: 401 });
-    }
-
     const body = await request.json();
     const {
       event_id,
@@ -84,6 +73,15 @@ export async function POST(request: Request) {
       kyc_document_number,
       kyc_document_url,
     } = body;
+
+    // Check authentication and permission
+    const { allowed, auth } = await checkPermission('members', event_id);
+    if (!allowed) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Unauthorized - No session found or insufficient permissions',
+      }, { status: 401 });
+    }
 
     if (!event_id || !employee_id || !name || !email || !phone) {
       return NextResponse.json({

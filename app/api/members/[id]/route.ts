@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { cookies } from 'next/headers';
+import { checkPermission, checkAuth } from '@/lib/auth-helpers';
 
 // GET single member by ID
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -48,19 +49,68 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 // PUT update member
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // Get session from cookies (server-side)
-    const cookieStore = await cookies();
-    const executiveSession = cookieStore.get('executive-session')?.value;
-    const memberSession = cookieStore.get('member-session')?.value;
+    const { id } = await params;
     
-    if (!executiveSession && !memberSession) {
-      return NextResponse.json({
-        status: 'error',
-        message: 'Unauthorized - No session found',
-      }, { status: 401 });
+    // First, get the member to check event_id
+    const client = await pool.connect();
+    let memberEventId: string | null = null;
+    
+    try {
+      const memberResult = await client.query(
+        `SELECT event_id FROM app.members WHERE id = $1 AND is_active = TRUE`,
+        [id]
+      );
+      
+      if (memberResult.rows.length === 0) {
+        client.release();
+        return NextResponse.json({
+          status: 'error',
+          message: 'Member not found',
+        }, { status: 404 });
+      }
+      
+      memberEventId = memberResult.rows[0].event_id;
+    } finally {
+      client.release();
     }
 
-    const { id } = await params;
+    // Check authentication - allow member session for their own profile, or executive/collaborator with permissions
+    const cookieStore = await cookies();
+    const memberSession = cookieStore.get('member-session')?.value;
+    
+    let isMemberUpdatingOwnProfile = false;
+    
+    // If it's a member session, verify they're updating their own profile
+    if (memberSession) {
+      try {
+        const member = JSON.parse(memberSession);
+        // Verify the member is updating their own profile by checking if the member ID matches
+        const verifyClient = await pool.connect();
+        try {
+          const verifyResult = await verifyClient.query(
+            `SELECT id FROM app.members WHERE id = $1 AND email = $2 AND is_active = TRUE`,
+            [id, member.email]
+          );
+          isMemberUpdatingOwnProfile = verifyResult.rows.length > 0;
+        } finally {
+          verifyClient.release();
+        }
+      } catch {
+        // Invalid member session
+      }
+    }
+
+    // If not a member updating their own profile, check for executive/collaborator permission
+    if (!isMemberUpdatingOwnProfile) {
+      const { allowed } = await checkPermission('members', memberEventId || undefined);
+      if (!allowed) {
+        return NextResponse.json({
+          status: 'error',
+          message: 'Unauthorized - No session found or insufficient permissions',
+        }, { status: 401 });
+      }
+    }
+
     const body = await request.json();
     const {
       employee_id,
@@ -80,10 +130,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }, { status: 400 });
     }
 
-    const client = await pool.connect();
+    const updateClient = await pool.connect();
     
     try {
-      const result = await client.query(
+      const result = await updateClient.query(
         `UPDATE app.members
         SET 
           employee_id = $1,
@@ -124,7 +174,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }, { status: 200 });
       
     } finally {
-      client.release();
+      updateClient.release();
     }
   } catch (error: any) {
     console.error('Failed to update member:', error);

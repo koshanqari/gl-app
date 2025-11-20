@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { setCollaboratorSession, getAndClearRedirectUrl } from "@/lib/auth-cookies";
+import { setCollaboratorSession, getCollaboratorSession, getAndClearRedirectUrl, clearExecutiveSession } from "@/lib/auth-cookies";
 import Image from "next/image";
 
 function CollaboratorLoginContent() {
@@ -59,19 +59,33 @@ function CollaboratorLoginContent() {
         ? JSON.parse(collaborator.permissions)
         : collaborator.permissions;
 
+      // Clear any existing executive session to avoid conflicts
+      clearExecutiveSession();
+
       // Store collaborator info in cookie
-      setCollaboratorSession({
+      const sessionData = {
         id: collaborator.id,
         email: email,
         eventId: eventId,
         permissions: permissions,
-      });
+      };
+      
+      console.log('[CollaboratorLogin] Setting session:', sessionData);
+      setCollaboratorSession(sessionData);
+      
+      // Verify cookie was set
+      const verifySession = getCollaboratorSession();
+      console.log('[CollaboratorLogin] Verified session:', verifySession);
+
+      // Small delay to ensure cookie is set before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Check for redirect URL first
       const redirectUrl = getAndClearRedirectUrl();
       
       if (redirectUrl) {
-        router.push(redirectUrl);
+        // Use window.location for full page reload to ensure session is read
+        window.location.href = redirectUrl;
       } else {
         // Redirect to first available page based on permissions
         const firstAvailableRoute = permissions.stay
@@ -92,7 +106,8 @@ function CollaboratorLoginContent() {
           ? "meals"
           : "overview";
 
-        router.push(`/executive/event_portal/${eventId}/${firstAvailableRoute}`);
+        // Use window.location for full page reload to ensure session is read
+        window.location.href = `/executive/event_portal/${eventId}/${firstAvailableRoute}`;
       }
     } catch (error) {
       console.error('Login error:', error);

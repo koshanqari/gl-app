@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { uploadFileToS3, generateFileKey, deleteFileFromS3, extractKeyFromUrl } from '@/lib/s3';
 import { cookies } from 'next/headers';
+import { checkAuth } from '@/lib/auth-helpers';
 
 // Max file size: 5MB
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -23,12 +24,12 @@ const ALLOWED_DOCUMENT_TYPES = [
 
 export async function POST(request: Request) {
   try {
-    // Check authentication (executive or member)
+    // Check authentication (executive, collaborator, or member)
+    const auth = await checkAuth();
     const cookieStore = await cookies();
-    const executiveSession = cookieStore.get('executive-session')?.value;
     const memberSession = cookieStore.get('member-session')?.value;
 
-    if (!executiveSession && !memberSession) {
+    if (!auth.isAuthenticated && !memberSession) {
       return NextResponse.json(
         {
           status: 'error',
@@ -147,12 +148,12 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    // Check authentication (executive or member)
+    // Check authentication (executive, collaborator, or member)
+    const auth = await checkAuth();
     const cookieStore = await cookies();
-    const executiveSession = cookieStore.get('executive-session')?.value;
     const memberSession = cookieStore.get('member-session')?.value;
 
-    if (!executiveSession && !memberSession) {
+    if (!auth.isAuthenticated && !memberSession) {
       return NextResponse.json(
         {
           status: 'error',

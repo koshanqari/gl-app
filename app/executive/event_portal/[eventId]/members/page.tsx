@@ -1,8 +1,9 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Plus, Upload, Link2, Search, Mail, Phone, User, Download, ChevronDown, FileCheck, X, Loader2, FileText } from "lucide-react";
+import QRCode from "react-qr-code";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +27,9 @@ export default function MembersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [kycFilter, setKycFilter] = useState<"all" | "completed" | "pending">("all");
   const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [event, setEvent] = useState<any>(null);
+  const [partner, setPartner] = useState<any>(null);
+  const qrCodeRef = useRef<HTMLDivElement>(null);
 
   // Fetch members from API
   const fetchMembers = useCallback(async () => {
@@ -44,6 +48,31 @@ export default function MembersPage() {
     } finally {
       setLoading(false);
     }
+  }, [eventId]);
+
+  // Fetch event and partner data
+  useEffect(() => {
+    const fetchEventData = async () => {
+      try {
+        const eventResponse = await fetch(`/api/events/${eventId}`);
+        if (eventResponse.ok) {
+          const eventData = await eventResponse.json();
+          setEvent(eventData.event);
+          
+          if (eventData.event.partner_id) {
+            const partnerResponse = await fetch(`/api/partners/${eventData.event.partner_id}`);
+            if (partnerResponse.ok) {
+              const partnerData = await partnerResponse.json();
+              setPartner(partnerData.partner);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch event/partner data:', error);
+      }
+    };
+    
+    fetchEventData();
   }, [eventId]);
 
   // Fetch members on mount and when refresh is triggered
@@ -153,8 +182,8 @@ export default function MembersPage() {
   };
 
   const handleDownloadTemplate = () => {
-    // Create CSV template with country code separate and KYC fields (optional)
-    const csvContent = "Employee ID,Name,Email,Country Code,Phone,KYC Type (optional),KYC Number (optional)\nEMP001,John Doe,john.doe@example.com,+91,1234567890,aadhaar,1234-5678-9012\n";
+    // Create CSV template with basic fields only (no KYC fields)
+    const csvContent = "Employee ID,Name,Email,Country Code,Phone\nEMP001,John Doe,john.doe@example.com,+91,1234567890\n";
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -167,7 +196,7 @@ export default function MembersPage() {
   };
 
   const handleDownloadData = () => {
-    // Export existing members data
+    // Export existing members data with ALL fields
     if (members.length === 0) {
       alert('No members to export');
       return;
@@ -178,15 +207,20 @@ export default function MembersPage() {
 
     // Create CSV content - wrap all fields in quotes for safety
     const headers = [
+      'ID',
+      'Event ID',
       'Employee ID',
       'Name', 
       'Email',
       'Country Code',
       'Phone',
+      'KYC Document Type',
+      'KYC Document Number',
+      'KYC Document URL',
       'KYC Status',
-      'KYC Type',
-      'KYC Number',
-      'KYC Document Link'
+      'Is Active',
+      'Created At',
+      'Updated At'
     ];
 
     const rows = members.map(member => {
@@ -199,17 +233,33 @@ export default function MembersPage() {
       const kycDocumentLink = member.kyc_document_url 
         ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/view-document?key=${encodeURIComponent(member.kyc_document_url)}`
         : '';
-      
+
+      // Format dates
+      const formatDate = (dateString: string | null | undefined) => {
+        if (!dateString) return '';
+        try {
+          const date = new Date(dateString);
+          return date.toISOString().replace('T', ' ').substring(0, 19);
+        } catch {
+          return dateString;
+        }
+      };
+
       const row = [
+        member.id || '',
+        member.event_id || '',
         member.employee_id || '',
         member.name || '',
         member.email || '',
         member.country_code || '+91',
         member.phone || '',
-        kycComplete ? 'Complete' : 'Incomplete',
         member.kyc_document_type || '',
         member.kyc_document_number || '',
-        kycDocumentLink
+        kycDocumentLink,
+        kycComplete ? 'Complete' : 'Incomplete',
+        member.is_active ? 'Yes' : 'No',
+        formatDate(member.created_at),
+        formatDate(member.updated_at)
       ];
 
       // Wrap each cell in quotes and escape any quotes inside
@@ -272,8 +322,6 @@ export default function MembersPage() {
       const emailIdx = getHeaderIndex('Email');
       const countryCodeIdx = getHeaderIndex('Country Code');
       const phoneIdx = getHeaderIndex('Phone');
-      const kycTypeIdx = getHeaderIndex('KYC Type');
-      const kycNumberIdx = getHeaderIndex('KYC Number');
 
       // Parse rows
       const newMembers = [];
@@ -316,9 +364,10 @@ export default function MembersPage() {
           email: values[emailIdx],
           country_code: values[countryCodeIdx] || '+91',
           phone: values[phoneIdx],
-          kyc_document_type: kycTypeIdx >= 0 ? (values[kycTypeIdx] || null) : null,
-          kyc_document_number: kycNumberIdx >= 0 ? (values[kycNumberIdx] || null) : null,
-          kyc_document_url: null, // Document upload must be done via UI
+          // KYC fields are not set via CSV - members must complete KYC through the member panel
+          kyc_document_type: null,
+          kyc_document_number: null,
+          kyc_document_url: null,
         };
 
         // Check if employee_id or email already exists
@@ -379,9 +428,120 @@ export default function MembersPage() {
 
   const registrationLink = `${window.location.origin}/register/${eventId}`;
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(registrationLink);
-    alert("Registration link copied to clipboard!");
+  const handleDownloadQR = async () => {
+    try {
+      if (!qrCodeRef.current) return;
+
+      // Get the SVG element from the ref
+      const svgElement = qrCodeRef.current.querySelector('svg');
+      if (!svgElement) {
+        alert('QR code not found. Please try again.');
+        return;
+      }
+
+      // Create a canvas element
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Set canvas size
+      const padding = 40;
+      const qrSize = 300;
+      const textHeight = 60;
+      const totalHeight = padding * 2 + textHeight * 2 + qrSize;
+      const totalWidth = padding * 2 + qrSize;
+      
+      canvas.width = totalWidth;
+      canvas.height = totalHeight;
+
+      // Fill white background
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, totalWidth, totalHeight);
+
+      // Draw company name
+      ctx.fillStyle = '#1e293b';
+      ctx.font = 'bold 24px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const companyName = partner?.company_name || 'Company Name';
+      ctx.fillText(companyName, totalWidth / 2, padding);
+
+      // Draw event name
+      ctx.font = '20px Arial, sans-serif';
+      ctx.fillStyle = '#64748b';
+      const eventName = event?.event_name || 'Event Name';
+      ctx.fillText(eventName, totalWidth / 2, padding + textHeight);
+
+      // Convert SVG to image
+      const svgData = new XMLSerializer().serializeToString(svgElement);
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      
+      const img = new Image();
+      img.onload = () => {
+        // Draw QR code
+        ctx.drawImage(img, padding, padding + textHeight * 2, qrSize, qrSize);
+        
+        // Convert canvas to image and download
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${companyName.replace(/[^a-z0-9]/gi, '_')}_${eventName.replace(/[^a-z0-9]/gi, '_')}_QR.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }
+          URL.revokeObjectURL(svgUrl);
+        }, 'image/png');
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(svgUrl);
+        alert('Failed to load QR code image. Please try again.');
+      };
+      img.src = svgUrl;
+    } catch (error) {
+      console.error('Failed to download QR code:', error);
+      alert('Failed to download QR code. Please try again.');
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      // Try modern clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(registrationLink);
+        alert("Registration link copied to clipboard!");
+        return;
+      }
+    } catch (err) {
+      console.error('Clipboard API failed:', err);
+    }
+
+    // Fallback: use execCommand with the input field
+    try {
+      const input = document.getElementById('registration-link-input') as HTMLInputElement;
+      if (input) {
+        input.select();
+        input.setSelectionRange(0, 99999); // For mobile devices
+        const successful = document.execCommand('copy');
+        if (successful) {
+          alert("Registration link copied to clipboard!");
+        } else {
+          throw new Error('execCommand failed');
+        }
+      }
+    } catch (err) {
+      // Final fallback: just select the text and ask user to copy manually
+      const input = document.getElementById('registration-link-input') as HTMLInputElement;
+      if (input) {
+        input.select();
+        input.setSelectionRange(0, 99999);
+        alert("Please manually copy the link (Ctrl+C or Cmd+C)");
+      }
+    }
   };
 
   return (
@@ -411,15 +571,15 @@ export default function MembersPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={handleDownloadTemplate}>
                 <Download className="mr-2 h-4 w-4" />
-                Download Template
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={handleDownloadData}>
-                <Download className="mr-2 h-4 w-4" />
-                Download Data
+                Download Registration Template
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => document.getElementById('csv-upload')?.click()}>
                 <Upload className="mr-2 h-4 w-4" />
-                Upload Data
+                Upload Registrations
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={handleDownloadData}>
+                <Download className="mr-2 h-4 w-4" />
+                Download All Data
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -638,26 +798,54 @@ export default function MembersPage() {
       {showLinkDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowLinkDialog(false)}>
           <Card className="w-full max-w-md m-4" onClick={(e) => e.stopPropagation()}>
-            <CardHeader>
+            <CardHeader className="relative">
               <CardTitle>Registration Link</CardTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-4 top-4 h-6 w-6"
+                onClick={() => setShowLinkDialog(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-slate-600">
                 Share this link with attendees to let them self-register for the event.
               </p>
+              
+              {/* QR Code */}
+              <div className="flex justify-center py-4 bg-slate-50 rounded-lg">
+                <div className="bg-white p-4 rounded-lg">
+                  <div ref={qrCodeRef}>
+                    <QRCode
+                      value={registrationLink}
+                      size={200}
+                      level="H"
+                      style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                    />
+                  </div>
+                </div>
+              </div>
+              
               <div className="flex items-center gap-2">
                 <Input
+                  id="registration-link-input"
                   value={registrationLink}
                   readOnly
-                  className="font-mono text-sm"
+                  className="font-mono text-sm cursor-text"
+                  onFocus={(e) => e.target.select()}
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
                 />
                 <Button onClick={handleCopyLink}>
                   Copy
                 </Button>
               </div>
-              <div className="flex justify-end">
-                <Button variant="outline" onClick={() => setShowLinkDialog(false)}>
-                  Close
+              
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={handleDownloadQR}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download QR Code
                 </Button>
               </div>
             </CardContent>

@@ -156,10 +156,10 @@ export default function MemberEventLayout({
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto bg-slate-50 pb-20 flex flex-col">
         <div className="flex-1">
-          {children}
+        {children}
         </div>
         <div className="mt-auto">
-          <MobileFooter />
+        <MobileFooter />
         </div>
       </main>
 

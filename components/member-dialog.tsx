@@ -188,10 +188,10 @@ export function MemberDialog({ isOpen, onClose, member, eventId, onSave }: Membe
                 <div className="flex items-center justify-between mb-2">
                   <Label>Upload Document/Image</Label>
                   {formData.kyc_document_url && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
                       onClick={async () => {
                         try {
                           const response = await fetch(`/api/file-url?key=${encodeURIComponent(formData.kyc_document_url)}`);
@@ -204,10 +204,10 @@ export function MemberDialog({ isOpen, onClose, member, eventId, onSave }: Membe
                         }
                       }}
                       className="h-7 text-xs"
-                    >
+                      >
                       <ExternalLink className="h-3 w-3 mr-1" />
                       Open
-                    </Button>
+                      </Button>
                   )}
                 </div>
                 <FileUpload

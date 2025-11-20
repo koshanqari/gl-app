@@ -17,8 +17,11 @@ export default function ExecutiveLayout({
   const [executive, setExecutive] = useState<any>(null);
 
   useEffect(() => {
-    // Check if user is logged in
-    if (pathname !== "/executive/login") {
+    // Skip auth check for event portal routes - they have their own layout that handles collaborator sessions
+    const isEventPortal = pathname.startsWith("/executive/event_portal");
+    
+    // Check if user is logged in (only for non-event-portal routes)
+    if (pathname !== "/executive/login" && !isEventPortal) {
       const session = getExecutiveSession();
       if (!session) {
         setRedirectUrl(pathname);

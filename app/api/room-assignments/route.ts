@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { cookies } from 'next/headers';
+import { checkPermission } from '@/lib/auth-helpers';
 
 // GET room assignments by event_id
 export async function GET(request: Request) {
@@ -57,19 +58,6 @@ export async function GET(request: Request) {
 // POST create or update room assignment
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const executiveSession = cookieStore.get('executive-session')?.value;
-    
-    if (!executiveSession) {
-      return NextResponse.json({
-        status: 'error',
-        message: 'Unauthorized',
-      }, { status: 401 });
-    }
-
-    const user = JSON.parse(executiveSession);
-    const created_by = user?.id || null;
-
     const body = await request.json();
     const {
       event_id,
@@ -85,6 +73,17 @@ export async function POST(request: Request) {
         message: 'event_id, member_id, and room_number are required',
       }, { status: 400 });
     }
+
+    // Check authentication and permission
+    const { allowed, auth } = await checkPermission('stay', event_id);
+    if (!allowed) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Unauthorized - No session found or insufficient permissions',
+      }, { status: 401 });
+    }
+
+    const created_by = auth.userId || null;
 
     const client = await pool.connect();
     

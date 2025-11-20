@@ -381,7 +381,7 @@ export default function StayManagementPage() {
 
         // Parse header row
         const headers = lines[0].split(',').map((h: string) => h.trim().replace(/^"|"$/g, ''));
-        
+          
         // Find column indices
         const getHeaderIndex = (name: string) => {
           return headers.findIndex((h: string) => h.toLowerCase().replace(' (optional)', '') === name.toLowerCase());
@@ -398,8 +398,8 @@ export default function StayManagementPage() {
           alert('Invalid CSV format. Employee ID column is required.');
           return;
         }
-
-        let updatedCount = 0;
+          
+          let updatedCount = 0;
         const errors: string[] = [];
 
         // Parse data rows
@@ -411,7 +411,7 @@ export default function StayManagementPage() {
           const values: string[] = [];
           let current = '';
           let inQuotes = false;
-
+            
           for (let j = 0; j < line.length; j++) {
             const char = line[j];
             if (char === '"') {
@@ -438,7 +438,7 @@ export default function StayManagementPage() {
           const empId = values[empIdIdx]?.replace(/^"|"$/g, '') || '';
           if (!empId) continue;
 
-          const member = members.find(m => m.employee_id === empId);
+              const member = members.find(m => m.employee_id === empId);
           if (!member) {
             errors.push(`Row ${i + 1}: Member with Employee ID "${empId}" not found`);
             continue;
@@ -467,29 +467,29 @@ export default function StayManagementPage() {
               }
             }
 
-            // Update check-in status
+                // Update check-in status
             const checkInStatus = checkInIdx >= 0 ? (values[checkInIdx]?.replace(/^"|"$/g, '').toLowerCase() || '') : '';
             if (checkInStatus === 'yes') {
-              setCheckedInMembers(prev => {
-                const newSet = new Set(prev);
-                newSet.add(member.id);
-                return newSet;
-              });
-
+                  setCheckedInMembers(prev => {
+                    const newSet = new Set(prev);
+                    newSet.add(member.id);
+                    return newSet;
+                  });
+                  
               const checkInTime = timeIdx >= 0 ? (values[timeIdx]?.replace(/^"|"$/g, '') || '') : '';
-              if (checkInTime) {
-                setCheckInRecords(prev => {
-                  const newRecords = new Map(prev);
-                  const existing = newRecords.get(member.id) || [];
-                  if (existing.length === 0) {
-                    newRecords.set(member.id, [{
-                      timestamp: new Date().toISOString(),
-                      action: 'check-in',
-                    }]);
+                  if (checkInTime) {
+                    setCheckInRecords(prev => {
+                      const newRecords = new Map(prev);
+                      const existing = newRecords.get(member.id) || [];
+                      if (existing.length === 0) {
+                        newRecords.set(member.id, [{
+                          timestamp: new Date().toISOString(),
+                          action: 'check-in',
+                        }]);
+                      }
+                      return newRecords;
+                    });
                   }
-                  return newRecords;
-                });
-              }
             } else if (checkInStatus === 'no') {
               setCheckedInMembers(prev => {
                 const newSet = new Set(prev);
@@ -498,7 +498,7 @@ export default function StayManagementPage() {
               });
             }
 
-            updatedCount++;
+                updatedCount++;
           } catch (error) {
             errors.push(`Row ${i + 1}: Error processing ${empId} - ${error}`);
           }
@@ -1007,10 +1007,10 @@ export default function StayManagementPage() {
                 <div className="space-y-2">
                   <Label>Hotel Image</Label>
                   <FileUpload
-                    value={hotelData.image_url}
+                        value={hotelData.image_url}
                     onChange={(url) => setHotelData({ ...hotelData, image_url: url })}
                     folder="hotels"
-                    accept="image/*"
+                          accept="image/*"
                     maxSize={5 * 1024 * 1024}
                     fileType="image"
                   />
@@ -1197,8 +1197,8 @@ export default function StayManagementPage() {
                   </>
                 ) : (
                   <>
-                    <Home className="mr-2 h-4 w-4" />
-                    Save Hotel Details
+                <Home className="mr-2 h-4 w-4" />
+                Save Hotel Details
                   </>
                 )}
               </Button>

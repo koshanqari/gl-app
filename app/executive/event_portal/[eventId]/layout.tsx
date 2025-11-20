@@ -40,42 +40,64 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
   const hasPreloaded = useRef(false);
 
   useEffect(() => {
-    // Only check auth once
+    // Only check auth once per mount
     if (hasCheckedAuth.current) return;
     hasCheckedAuth.current = true;
     
-    // For /executive/* routes, prioritize executive session
-    // Check for executive session first
+    // For /executive/* routes, check for collaborator session FIRST
+    // This ensures collaborators can access the event portal even if there's a stale executive session
+    const collabSession = getCollaboratorSession();
     const executiveSession = getExecutiveSession();
-    if (executiveSession) {
-      setUserRole("executive");
-      setUser(executiveSession);
-      // Executives have all permissions
-      setPermissions({
-        overview: true,
-        members: true,
-        stay: true,
-        crew: true,
-        itinerary: true,
-        travel: true,
-        meals: true,
-        event_profile: true,
-      });
+    
+    // Debug logging
+    console.log('[EventLayout] Auth check:', {
+      eventId,
+      hasCollabSession: !!collabSession,
+      collabEventId: collabSession?.eventId,
+      eventIdMatch: collabSession?.eventId === eventId,
+      hasExecutiveSession: !!executiveSession,
+    });
+    
+    // Check collaborator session first - if it matches the event, use it
+    if (collabSession && collabSession.eventId === eventId) {
+      // Collaborator session matches the current event - use it
+      console.log('[EventLayout] Using collaborator session');
+      setUserRole("collaborator");
+      setUser({ id: collabSession.id, name: "Collaborator", email: collabSession.email });
+      setPermissions(collabSession.permissions);
+    } else if (executiveSession) {
+      // No valid collaborator session, but executive session exists - use it
+      console.log('[EventLayout] Using executive session');
+        setUserRole("executive");
+        setUser(executiveSession);
+        // Executives have all permissions
+        setPermissions({
+          overview: true,
+          members: true,
+          stay: true,
+          crew: true,
+          itinerary: true,
+          travel: true,
+          meals: true,
+          event_profile: true,
+        });
     } else {
-      // Only check for collaborator session if no executive session exists
-      // AND the collaborator session matches the current event
-      const collabSession = getCollaboratorSession();
-      if (collabSession && collabSession.eventId === eventId) {
-        setUserRole("collaborator");
-        setUser({ id: collabSession.id, name: "Collaborator", email: collabSession.email });
-        setPermissions(collabSession.permissions);
+      // No valid session found
+      console.log('[EventLayout] No valid session, redirecting...');
+      // If collaborator session exists but for different event, clear it
+      if (collabSession && collabSession.eventId !== eventId) {
+        clearCollaboratorSession();
+      }
+      // Store current URL for redirect after login
+      setRedirectUrl(pathname);
+      // Redirect to collaborator login if there was a collaborator session, otherwise executive login
+      if (collabSession) {
+        // Redirect to collaborator login with the current event ID
+        console.log('[EventLayout] Redirecting to collaborator login');
+        router.push(`/collaborator/login?event=${eventId}`);
       } else {
-        // If collaborator session exists but for different event, clear it
-        if (collabSession && collabSession.eventId !== eventId) {
-          clearCollaboratorSession();
-        }
-        // Store current URL for redirect after login
-        setRedirectUrl(pathname);
+        // No session at all, redirect to executive login
+        console.log('[EventLayout] Redirecting to executive login');
         router.push("/executive/login");
       }
     }

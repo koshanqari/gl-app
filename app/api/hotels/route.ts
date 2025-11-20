@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { cookies } from 'next/headers';
+import { checkPermission } from '@/lib/auth-helpers';
 
 // GET hotel by event_id
 export async function GET(request: Request) {
@@ -89,26 +90,6 @@ export async function GET(request: Request) {
 // POST create or update hotel
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const executiveSession = cookieStore.get('executive-session')?.value;
-    
-    if (!executiveSession) {
-      return NextResponse.json({
-        status: 'error',
-        message: 'Unauthorized',
-      }, { status: 401 });
-    }
-
-    let user;
-    try {
-      user = JSON.parse(executiveSession);
-    } catch (e) {
-      return NextResponse.json({
-        status: 'error',
-        message: 'Unauthorized - Invalid session',
-      }, { status: 401 });
-    }
-
     const body = await request.json();
     const {
       event_id,
@@ -133,6 +114,18 @@ export async function POST(request: Request) {
         message: 'event_id and hotel_name are required',
       }, { status: 400 });
     }
+
+    // Check authentication and permission
+    const { allowed, auth } = await checkPermission('stay', event_id);
+    if (!allowed) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Unauthorized - No session found or insufficient permissions',
+      }, { status: 401 });
+    }
+
+    // Get user ID for created_by field
+    const userId = auth.isExecutive ? auth.userId : (auth.isCollaborator ? auth.userId : null);
 
     const client = await pool.connect();
     
@@ -206,7 +199,7 @@ export async function POST(request: Request) {
             pincode || null,
             maps_link || null,
             additional_details || null,
-            user.id,
+            userId,
           ]
         );
         hotelId = result.rows[0].id;

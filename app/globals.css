@@ -97,3 +97,23 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Prevent zooming on mobile devices */
+html {
+  touch-action: manipulation;
+  -ms-touch-action: manipulation;
+}
+
+body {
+  touch-action: pan-y pinch-zoom;
+  -ms-touch-action: pan-y pinch-zoom;
+}
+
+/* Allow scrolling but prevent zoom */
+@media (max-width: 768px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
+

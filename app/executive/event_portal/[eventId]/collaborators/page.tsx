@@ -114,8 +114,8 @@ export default function CollaboratorsPage() {
 
     setSaving(true);
     try {
-      if (editingId) {
-        // Update existing collaborator
+    if (editingId) {
+      // Update existing collaborator
         const response = await fetch(`/api/collaborators/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -131,8 +131,8 @@ export default function CollaboratorsPage() {
         } else {
           alert(data.message || 'Failed to update collaborator');
         }
-      } else {
-        // Add new collaborator
+    } else {
+      // Add new collaborator
         const response = await fetch('/api/collaborators', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -150,25 +150,25 @@ export default function CollaboratorsPage() {
         } else {
           alert(data.message || 'Failed to create collaborator');
         }
-      }
+    }
 
-      // Reset form
-      setFormData({
-        name: "",
-        email: "",
-        password: "",
-        organization: "",
-        permissions: {
-          overview: false,
-          members: false,
-          stay: false,
-          crew: false,
-          itinerary: false,
-          travel: false,
-          meals: false,
-          event_profile: false,
-        },
-      });
+    // Reset form
+    setFormData({
+      name: "",
+      email: "",
+      password: "",
+      organization: "",
+      permissions: {
+        overview: false,
+        members: false,
+        stay: false,
+        crew: false,
+        itinerary: false,
+        travel: false,
+        meals: false,
+        event_profile: false,
+      },
+    });
     } catch (error) {
       console.error('Failed to save collaborator:', error);
       alert('Failed to save collaborator. Please try again.');
@@ -321,10 +321,10 @@ export default function CollaboratorsPage() {
                 </div>
               </div>
             </div>
-            <Button onClick={() => setShowAddForm(true)}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add Collaborator
-            </Button>
+          <Button onClick={() => setShowAddForm(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add Collaborator
+          </Button>
           </div>
         )}
       </div>
@@ -526,16 +526,16 @@ export default function CollaboratorsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {collaborators.map((collaborator) => (
+              {collaborators.map((collaborator) => (
                     <tr
-                      key={collaborator.id}
+                  key={collaborator.id}
                       className="hover:bg-slate-50 transition-colors"
-                    >
+                >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
                             <UserPlus className="h-4 w-4 text-primary" />
-                          </div>
+                      </div>
                           <span className="text-sm font-medium text-slate-900">{collaborator.name}</span>
                         </div>
                       </td>
@@ -545,16 +545,16 @@ export default function CollaboratorsPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-slate-700">{collaborator.email}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopyEmail(collaborator.email)}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleCopyEmail(collaborator.email)}
                             className="h-7 w-7 p-0"
-                            title="Copy Email"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                                title="Copy Email"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1 max-w-xs">
@@ -585,37 +585,37 @@ export default function CollaboratorsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <Button
+                      <Button
                             variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditCollaborator(collaborator)}
-                            title="Edit Collaborator"
+                        size="sm"
+                        onClick={() => handleEditCollaborator(collaborator)}
+                        title="Edit Collaborator"
                             className="h-8 w-8 p-0"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
                             variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopyCredentials(collaborator)}
+                        size="sm"
+                        onClick={() => handleCopyCredentials(collaborator)}
                             title="Copy Email & Portal Link"
                             className="h-8 w-8 p-0"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <Button
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
                             variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteCollaborator(collaborator.id)}
+                        size="sm"
+                        onClick={() => handleDeleteCollaborator(collaborator.id)}
                             className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            title="Revoke Access"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        title="Revoke Access"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                       </td>
                     </tr>
-                  ))}
+              ))}
                 </tbody>
               </table>
             </div>
