@@ -117,7 +117,7 @@ export default function MemberItineraryPage() {
                     <div className="pt-2 border-t border-slate-100">
                       <p className="text-xs font-semibold text-slate-500 mb-2">Links:</p>
                       <div className="space-y-2">
-                        {activity.links.map((link) => (
+                        {activity.links.map((link: ItineraryLink) => (
                           <a
                             key={link.id}
                             href={link.link_url}
