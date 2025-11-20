@@ -1,57 +1,107 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { setMemberSession, getAndClearRedirectUrl } from "@/lib/auth-cookies";
+import { getAndClearRedirectUrl } from "@/lib/auth-cookies";
 import Image from "next/image";
 
 export default function MemberLogin() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [employeeId, setEmployeeId] = useState("");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sendingOTP, setSendingOTP] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
+  // Countdown timer for resend
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendTimer]);
+
+  const handleSendOTP = async () => {
+    if (!email || !email.includes('@')) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
+    setError("");
+    setSendingOTP(true);
+
+    try {
+      const response = await fetch('/api/member/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || "Failed to send OTP");
+        if (data.remainingSeconds) {
+          setResendTimer(data.remainingSeconds);
+        }
+        setSendingOTP(false);
+        return;
+      }
+
+      setOtpSent(true);
+      setResendTimer(120); // 2 minutes
+      setSendingOTP(false);
+    } catch (error) {
+      console.error('Send OTP error:', error);
+      setError("Failed to send OTP. Please try again.");
+      setSendingOTP(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
+    if (!otp || otp.length !== 6) {
+      setError("Please enter the 6-digit OTP");
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Authenticate member via API
-      const response = await fetch('/api/member/login', {
+      const response = await fetch('/api/member/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, employee_id: employeeId }),
+        body: JSON.stringify({ email, otp }),
+        credentials: 'include', // Ensure cookies are sent and received
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.message || "Invalid email or employee ID");
+        setError(data.message || "Invalid OTP");
         setLoading(false);
         return;
       }
 
-      const member = data.member;
+      console.log('[Member Login] OTP verified successfully, redirecting...');
 
-      // Store member session in cookie
-      const memberSession = {
-        email: member.email,
-        employee_id: member.employee_id,
-        name: member.name,
-        id: member.id,
-        event_id: member.event_id,
-      };
-      
-      setMemberSession(memberSession);
-      
+      // Small delay to ensure cookie is set before navigation
+      await new Promise(resolve => setTimeout(resolve, 200));
+
       // Check for redirect URL or default to events page
       const redirectUrl = getAndClearRedirectUrl() || "/member/events";
-      router.push(redirectUrl);
+      
+      console.log('[Member Login] Redirecting to:', redirectUrl);
+      
+      // Use window.location for full page reload to ensure session is read
+      window.location.href = redirectUrl;
     } catch (error) {
       console.error('Login error:', error);
       setError("Failed to authenticate. Please try again.");
@@ -115,11 +165,11 @@ export default function MemberLogin() {
           {/* Logo */}
           <div className="flex items-center justify-center mb-6">
             <Image
-              src="https://cdn-sleepyhug-prod.b-cdn.net/media/intellsys-logo.webp"
-              alt="Intellsys Logo"
-              width={200}
-              height={60}
-              className="h-12 w-auto object-contain"
+              src="https://iba-consulting-prod.b-cdn.net/Logos/Event central (Light) 2.png"
+              alt="Event Central Logo"
+              width={300}
+              height={80}
+              className="h-16 w-auto object-contain"
               unoptimized
             />
           </div>
@@ -137,33 +187,80 @@ export default function MemberLogin() {
                 <Label htmlFor="email" className="text-slate-300 text-sm font-medium">
                   Email Address
                 </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="member@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={loading}
-                  className="h-12 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-slate-600 focus:ring-slate-600"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="member@company.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (otpSent) {
+                        setOtpSent(false);
+                        setOtp("");
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !otpSent && !sendingOTP && email && email.includes('@')) {
+                        e.preventDefault();
+                        handleSendOTP();
+                      }
+                    }}
+                    required
+                    disabled={loading || sendingOTP || otpSent}
+                    className="h-12 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-slate-600 focus:ring-slate-600"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleSendOTP}
+                    disabled={loading || sendingOTP || !email || resendTimer > 0}
+                    className="h-12 px-4 bg-slate-700 hover:bg-slate-600 text-white font-medium whitespace-nowrap"
+                  >
+                    {sendingOTP ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 bg-white rounded-full animate-bounce" />
+                        <span className="w-2 h-2 bg-white rounded-full animate-bounce animation-delay-200" />
+                        <span className="w-2 h-2 bg-white rounded-full animate-bounce animation-delay-400" />
+                      </span>
+                    ) : resendTimer > 0 ? (
+                      `Resend (${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, '0')})`
+                    ) : otpSent ? (
+                      "Resend OTP"
+                    ) : (
+                      "Send OTP"
+                    )}
+                  </Button>
+                </div>
+                {otpSent && (
+                  <p className="text-xs text-green-400">
+                    OTP sent to your email and SMS.
+                  </p>
+                )}
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="employeeId" className="text-slate-300 text-sm font-medium">
-                  Employee ID
-                </Label>
-                <Input
-                  id="employeeId"
-                  type="text"
-                  placeholder="Enter your Employee ID"
-                  value={employeeId}
-                  onChange={(e) => setEmployeeId(e.target.value)}
-                  required
-                  disabled={loading}
-                  className="h-12 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-slate-600 focus:ring-slate-600"
-                />
-              </div>
+              {otpSent && (
+                <div className="space-y-2">
+                  <Label htmlFor="otp" className="text-slate-300 text-sm font-medium">
+                    Enter OTP <span className="text-slate-500">(6 digits)</span>
+                  </Label>
+                  <Input
+                    id="otp"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={otp}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setOtp(value);
+                    }}
+                    required
+                    disabled={loading}
+                    className="h-12 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus:border-slate-600 focus:ring-slate-600 text-center text-2xl tracking-widest font-mono"
+                  />
+                </div>
+              )}
               
               {error && (
                 <div className="text-sm text-red-400 bg-red-950/50 border border-red-900 p-3 rounded-lg">
@@ -171,21 +268,23 @@ export default function MemberLogin() {
                 </div>
               )}
               
-              <Button 
-                type="submit" 
-                className="w-full h-12 bg-white text-slate-900 hover:bg-slate-100 font-semibold text-base rounded-lg transition-all" 
-                disabled={loading}
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-2 h-2 bg-slate-900 rounded-full animate-bounce" />
-                    <span className="w-2 h-2 bg-slate-900 rounded-full animate-bounce animation-delay-200" />
-                    <span className="w-2 h-2 bg-slate-900 rounded-full animate-bounce animation-delay-400" />
-                  </span>
-                ) : (
-                  "Sign In"
-                )}
-              </Button>
+              {otpSent && (
+                <Button 
+                  type="submit" 
+                  className="w-full h-12 bg-white text-slate-900 hover:bg-slate-100 font-semibold text-base rounded-lg transition-all" 
+                  disabled={loading || otp.length !== 6}
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-2 h-2 bg-slate-900 rounded-full animate-bounce" />
+                      <span className="w-2 h-2 bg-slate-900 rounded-full animate-bounce animation-delay-200" />
+                      <span className="w-2 h-2 bg-slate-900 rounded-full animate-bounce animation-delay-400" />
+                    </span>
+                  ) : (
+                    "Verify & Sign In"
+                  )}
+                </Button>
+              )}
               
               <p className="text-xs text-slate-500 text-center pt-2">
                 Protected by enterprise-grade security

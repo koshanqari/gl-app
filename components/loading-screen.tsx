@@ -77,18 +77,18 @@ export function LoadingScreen({ onComplete, progress, showStartButton: externalS
 
       <div className="relative z-10 text-center px-4 pb-8">
         {/* Logo */}
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center mb-8">
           <Image 
-            src="https://cdn-sleepyhug-prod.b-cdn.net/media/intellsys-logo.webp"
-            alt="Logo"
-            width={240}
-            height={240}
-            className="w-60 h-60 object-contain"
+            src="https://iba-consulting-prod.b-cdn.net/Logos/Event central (Light) 2.png"
+            alt="Event Central Logo"
+            width={600}
+            height={160}
+            className="w-96 h-auto object-contain"
           />
         </div>
 
         {/* Main Icon Animation */}
-        <div className="relative -mt-12">
+        <div className="relative">
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-32 h-32 rounded-full bg-primary/20 animate-ping" />
           </div>

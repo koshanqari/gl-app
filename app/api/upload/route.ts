@@ -3,6 +3,10 @@ import { uploadFileToS3, generateFileKey, deleteFileFromS3, extractKeyFromUrl } 
 import { cookies } from 'next/headers';
 import { checkAuth } from '@/lib/auth-helpers';
 
+// Ensure this is treated as a dynamic route
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 // Max file size: 5MB
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -105,8 +109,8 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Generate unique key
-    const key = generateFileKey(targetFolder, file.name);
+    // Generate unique key - pass content type to help with camera uploads
+    const key = generateFileKey(targetFolder, file.name || 'camera-photo', file.type);
 
     // Upload to S3 (returns the S3 key)
     const s3Key = await uploadFileToS3(buffer, key, file.type);
@@ -135,13 +139,19 @@ export async function POST(request: Request) {
     );
   } catch (error: any) {
     console.error('Upload failed:', error);
+    // Ensure we always return JSON, even on errors
     return NextResponse.json(
       {
         status: 'error',
         message: 'Failed to upload file',
-        error: error.message,
+        error: error.message || 'Unknown error occurred',
       },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
     );
   }
 }

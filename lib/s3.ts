@@ -92,19 +92,81 @@ export async function getPresignedDownloadUrl(
 /**
  * Generate a unique file key with timestamp and random string
  * @param folder - The folder/prefix for the file (e.g., 'partners', 'events', 'members')
- * @param filename - Original filename
+ * @param filename - Original filename (may be empty or unusual for camera uploads)
+ * @param contentType - Optional content type to help determine extension
  * @returns Unique S3 key
  */
-export function generateFileKey(folder: string, filename: string): string {
+export function generateFileKey(folder: string, filename: string, contentType?: string): string {
   const timestamp = Date.now();
   const randomString = Math.random().toString(36).substring(2, 15);
-  const extension = filename.split('.').pop();
-  const sanitizedFilename = filename
-    .split('.')[0]
+  
+  // Sanitize folder name to ensure it's valid
+  const sanitizedFolder = folder.replace(/[^a-z0-9_-]/gi, '-').toLowerCase();
+  
+  // Normalize filename - handle empty, blob:, or unusual camera filenames
+  let normalizedFilename = filename || '';
+  
+  // Handle blob URLs or empty filenames (common with camera uploads)
+  if (!normalizedFilename || normalizedFilename.startsWith('blob:') || normalizedFilename.trim() === '') {
+    normalizedFilename = 'camera-photo';
+  }
+  
+  // Remove any path components (handle cases like "path/to/image.jpg")
+  const filenameOnly = normalizedFilename.split('/').pop() || normalizedFilename;
+  
+  // Extract extension from filename
+  let extension = '';
+  const lastDotIndex = filenameOnly.lastIndexOf('.');
+  
+  if (lastDotIndex > 0 && lastDotIndex < filenameOnly.length - 1) {
+    extension = filenameOnly.substring(lastDotIndex + 1).toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+  
+  // If no extension found, try to infer from content type (important for camera uploads)
+  if (!extension && contentType) {
+    if (contentType.startsWith('image/')) {
+      const mimeExtension = contentType.split('/')[1];
+      if (mimeExtension && ['jpeg', 'jpg', 'png', 'gif', 'webp'].includes(mimeExtension)) {
+        extension = mimeExtension === 'jpeg' ? 'jpg' : mimeExtension;
+      }
+    } else if (contentType === 'application/pdf') {
+      extension = 'pdf';
+    }
+  }
+  
+  // Default extension if still not found
+  if (!extension || extension.length === 0) {
+    extension = 'jpg'; // Default to jpg for camera photos
+  }
+  
+  // Sanitize filename - remove extension first, then sanitize
+  const nameWithoutExt = lastDotIndex > 0 && lastDotIndex < filenameOnly.length - 1
+    ? filenameOnly.substring(0, lastDotIndex)
+    : filenameOnly;
+  
+  let sanitizedFilename = nameWithoutExt
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, '-');
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-') // Replace multiple dashes with single dash
+    .replace(/^-|-$/g, '') // Remove leading/trailing dashes
+    .substring(0, 50); // Limit length to avoid issues
+  
+  // Ensure we have a valid filename (fallback if sanitization removes everything)
+  if (!sanitizedFilename || sanitizedFilename.length === 0) {
+    sanitizedFilename = 'photo';
+  }
 
-  return `${folder}/${timestamp}-${randomString}-${sanitizedFilename}.${extension}`;
+  // Construct the key - use simpler format for camera uploads to avoid pattern issues
+  const key = `${sanitizedFolder}/${timestamp}-${randomString}-${sanitizedFilename}.${extension}`;
+  
+  // Final validation: ensure key doesn't contain invalid characters and matches safe pattern
+  const safeKeyPattern = /^[a-z0-9/._-]+$/i;
+  if (!safeKeyPattern.test(key)) {
+    // If key is invalid, generate a completely safe minimal one
+    return `${sanitizedFolder}/${timestamp}-${randomString}.${extension}`;
+  }
+  
+  return key;
 }
 
 /**

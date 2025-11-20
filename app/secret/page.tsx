@@ -87,11 +87,11 @@ export default function AdminLoginPage() {
           {/* Logo */}
           <div className="flex items-center justify-center mb-6">
             <Image
-              src="https://cdn-sleepyhug-prod.b-cdn.net/media/intellsys-logo.webp"
-              alt="Intellsys Logo"
-              width={200}
-              height={60}
-              className="h-12 w-auto object-contain"
+              src="https://iba-consulting-prod.b-cdn.net/Logos/Event central (Light) 2.png"
+              alt="Event Central Logo"
+              width={300}
+              height={80}
+              className="h-16 w-auto object-contain"
               unoptimized
             />
           </div>

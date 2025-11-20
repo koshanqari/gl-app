@@ -21,6 +21,26 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Please enter a valid email address',
+        field: 'email'
+      }, { status: 400 });
+    }
+
+    // Validate phone number (exactly 10 digits)
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(phone)) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Phone number must be exactly 10 digits',
+        field: 'phone'
+      }, { status: 400 });
+    }
+
     const client = await pool.connect();
     
     try {

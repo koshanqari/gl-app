@@ -86,6 +86,12 @@ export function FileUpload({
       return;
     }
 
+    // Validate file type
+    if (!file.type) {
+      setError("Invalid file type. Please try again.");
+      return;
+    }
+
     setError(null);
     setUploading(true);
 
@@ -101,6 +107,7 @@ export function FileUpload({
       }
 
       // Upload to S3
+      // Note: generateFileKey on the server will handle empty or blob filenames from camera
       const uploadFormData = new FormData();
       uploadFormData.append("file", file);
       uploadFormData.append("folder", folder);
@@ -114,10 +121,74 @@ export function FileUpload({
         body: uploadFormData,
       });
 
-      const data = await response.json();
+      // Check if response is JSON before parsing
+      // This prevents "Unexpected token '<'" errors when server returns HTML error pages
+      const contentType = response.headers.get("content-type") || "";
+      let data;
+      
+      if (contentType.includes("application/json")) {
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          // Even if content-type says JSON, parsing might fail
+          console.error("Failed to parse JSON response:", parseError);
+          throw new Error("Invalid response from server. Please try again.");
+        }
+      } else {
+        // If response is not JSON (e.g., HTML error page), get text
+        const text = await response.text();
+        console.error("Non-JSON response received:", {
+          status: response.status,
+          statusText: response.statusText,
+          contentType: contentType,
+          text: text.substring(0, 200), // First 200 chars for debugging
+        });
+        
+        // Try to parse as JSON if it looks like JSON (starts with { or [)
+        const trimmedText = text.trim();
+        if ((trimmedText.startsWith("{") || trimmedText.startsWith("[")) && trimmedText.length > 0) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            // If parsing fails, throw user-friendly error
+            throw new Error(
+              response.status === 401 
+                ? "Unauthorized. Please log in again."
+                : response.status === 413
+                ? "File is too large. Please choose a smaller file."
+                : response.status >= 500
+                ? "Server error. Please try again later."
+                : "Upload failed. Please try again."
+            );
+          }
+        } else {
+          // It's HTML or other non-JSON content, throw user-friendly error
+          throw new Error(
+            response.status === 401 
+              ? "Unauthorized. Please log in again."
+              : response.status === 413
+              ? "File is too large. Please choose a smaller file."
+              : response.status >= 500
+              ? "Server error. Please try again later."
+              : "Upload failed. Please try again."
+          );
+        }
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || "Upload failed");
+        // Log detailed error for debugging
+        console.error("Upload API error:", {
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+        });
+        throw new Error(data?.message || data?.error || "Upload failed");
+      }
+
+      // Validate the returned key format
+      if (!data.key || typeof data.key !== 'string') {
+        console.error("Invalid key returned from upload API:", data);
+        throw new Error("Invalid file key received from server");
       }
 
       // Update with the S3 key (not URL)

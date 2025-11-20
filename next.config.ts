@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
         hostname: 'iba-consulting-prod.b-cdn.net',
         pathname: '/gj-logos/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'iba-consulting-prod.b-cdn.net',
+        pathname: '/Logos/**',
+      },
     ],
   },
 };

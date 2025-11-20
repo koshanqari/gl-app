@@ -189,6 +189,7 @@ interface PhoneInputProps {
   disabled?: boolean;
   showLabel?: boolean;
   id?: string;
+  onBlur?: () => void;
 }
 
 export function PhoneInput({
@@ -201,6 +202,7 @@ export function PhoneInput({
   disabled = false,
   showLabel = true,
   id = "phone",
+  onBlur,
 }: PhoneInputProps) {
   const [open, setOpen] = useState(false);
 
@@ -303,9 +305,10 @@ export function PhoneInput({
             const value = e.target.value.replace(/[^0-9]/g, "");
             onPhoneNumberChange(value);
           }}
+          onBlur={onBlur}
           required={required}
           disabled={disabled}
-          maxLength={15}
+          maxLength={10}
           className="flex-1"
         />
       </div>

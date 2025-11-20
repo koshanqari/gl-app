@@ -29,6 +29,11 @@ export default function RegisterPage() {
     phone: "",
   });
 
+  const [validationErrors, setValidationErrors] = useState<{
+    email?: string;
+    phone?: string;
+  }>({});
+
   // Fetch event and partner details
   useEffect(() => {
     const fetchEvent = async () => {
@@ -58,10 +63,37 @@ export default function RegisterPage() {
     fetchEvent();
   }, [eventId]);
 
+  // Email validation
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Phone validation (exactly 10 digits)
+  const validatePhone = (phone: string): boolean => {
+    const phoneRegex = /^\d{10}$/;
+    return phoneRegex.test(phone);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    setValidationErrors({});
+
+    // Validate email
+    if (!validateEmail(formData.email)) {
+      setValidationErrors({ email: 'Please enter a valid email address' });
+      setSubmitting(false);
+      return;
+    }
+
+    // Validate phone (exactly 10 digits)
+    if (!validatePhone(formData.phone)) {
+      setValidationErrors({ phone: 'Phone number must be exactly 10 digits' });
+      setSubmitting(false);
+      return;
+    }
 
     try {
       const response = await fetch('/api/register', {
@@ -222,15 +254,28 @@ export default function RegisterPage() {
                   onChange={(e) => {
                     setFormData({ ...formData, email: e.target.value });
                     setError(null);
+                    if (validationErrors.email) {
+                      setValidationErrors({ ...validationErrors, email: undefined });
+                    }
+                  }}
+                  onBlur={() => {
+                    if (formData.email && !validateEmail(formData.email)) {
+                      setValidationErrors({ ...validationErrors, email: 'Please enter a valid email address' });
+                    }
                   }}
                   placeholder="your.email@company.com"
                   required
+                  className={validationErrors.email ? 'border-red-500' : ''}
                 />
+                {validationErrors.email && (
+                  <p className="text-sm text-red-500 mt-1">{validationErrors.email}</p>
+                )}
               </div>
 
               <div>
                 <Label htmlFor="phone">
                   Phone <span className="text-red-500">*</span>
+                  <span className="text-xs text-slate-500 ml-2">(10 digits)</span>
                 </Label>
                 <PhoneInput
                   countryCode={formData.country_code}
@@ -240,12 +285,25 @@ export default function RegisterPage() {
                     setError(null);
                   }}
                   onPhoneNumberChange={(value) => {
-                    setFormData({ ...formData, phone: value });
+                    // Limit to 10 digits
+                    const digitsOnly = value.replace(/[^0-9]/g, '').slice(0, 10);
+                    setFormData({ ...formData, phone: digitsOnly });
                     setError(null);
+                    if (validationErrors.phone && validatePhone(digitsOnly)) {
+                      setValidationErrors({ ...validationErrors, phone: undefined });
+                    }
+                  }}
+                  onBlur={() => {
+                    if (formData.phone && !validatePhone(formData.phone)) {
+                      setValidationErrors({ ...validationErrors, phone: 'Phone number must be exactly 10 digits' });
+                    }
                   }}
                   showLabel={false}
                   required
                 />
+                {validationErrors.phone && (
+                  <p className="text-sm text-red-500 mt-1">{validationErrors.phone}</p>
+                )}
               </div>
             </div>
 
