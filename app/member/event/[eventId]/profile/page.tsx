@@ -25,14 +25,15 @@ import {
   Save,
   X
 } from "lucide-react";
-import { getMemberSession } from "@/lib/auth-cookies";
+import { useMemberEventData } from "@/contexts/member-event-data-context";
 
 export default function MemberProfilePage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const [memberData, setMemberData] = useState<any>(null);
+  const { memberData: contextMemberData } = useMemberEventData();
+  const [memberData, setMemberData] = useState<any>(contextMemberData);
   const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -46,49 +47,22 @@ export default function MemberProfilePage() {
   const [isEditingKYC, setIsEditingKYC] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Initialize form data from context member data
   useEffect(() => {
-    // Get member session and fetch real data
-    const fetchMemberData = async () => {
-    const member = getMemberSession();
-      if (!member) {
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        // Fetch members for this event
-        const response = await fetch(`/api/members?event_id=${eventId}`);
-        const data = await response.json();
-
-        if (response.ok && data.members) {
-          // Find the member by email
-          const memberRecord = data.members.find(
-            (m: any) => m.email === member.email
-      );
-      
-      if (memberRecord) {
-        setMemberData(memberRecord);
-        setFormData({
-          name: memberRecord.name,
-          email: memberRecord.email,
-          phone: memberRecord.phone,
-          employee_id: memberRecord.employee_id,
-              country_code: memberRecord.country_code || "+91",
-          kyc_document_type: memberRecord.kyc_document_type || "",
-          kyc_document_number: memberRecord.kyc_document_number || "",
-              kyc_document_url: memberRecord.kyc_document_url || "",
-        });
-      }
+    if (contextMemberData) {
+      setMemberData(contextMemberData);
+      setFormData({
+        name: contextMemberData.name,
+        email: contextMemberData.email,
+        phone: contextMemberData.phone,
+        employee_id: contextMemberData.employee_id,
+        country_code: contextMemberData.country_code || "+91",
+        kyc_document_type: contextMemberData.kyc_document_type || "",
+        kyc_document_number: contextMemberData.kyc_document_number || "",
+        kyc_document_url: contextMemberData.kyc_document_url || "",
+      });
     }
-      } catch (error) {
-        console.error('Failed to fetch member data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchMemberData();
-  }, [eventId]);
+  }, [contextMemberData]);
 
   const handleSave = async () => {
     if (!memberData?.id) return;

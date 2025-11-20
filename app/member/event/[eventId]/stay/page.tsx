@@ -1,7 +1,6 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   MobileCard,
@@ -13,6 +12,7 @@ import {
   MobileEmptyState,
 } from "@/components/mobile";
 import { KYCRequiredMessage } from "@/components/mobile/kyc-required-message";
+import { useMemberEventData } from "@/contexts/member-event-data-context";
 import { 
   Home, 
   MapPin, 
@@ -22,185 +22,20 @@ import {
   ExternalLink,
   Mail
 } from "lucide-react";
-import { getMemberSession } from "@/lib/auth-cookies";
 
 export default function MemberStayPage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const [memberData, setMemberData] = useState<any>(null);
-  const [roomAssignment, setRoomAssignment] = useState<any>(null);
-  const [hotel, setHotel] = useState<any>(null);
-  const [hotelImageUrl, setHotelImageUrl] = useState<string>("");
-  const [roommates, setRoommates] = useState<any[]>([]);
-  const [isKYCComplete, setIsKYCComplete] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const {
+    memberData,
+    hotel,
+    hotelImageUrl,
+    roomAssignment,
+    roommates,
+    isKYCComplete,
+  } = useMemberEventData();
 
-  useEffect(() => {
-    const fetchData = async () => {
-      // Get member session
-      const member = getMemberSession();
-      if (!member) return;
-
-      try {
-        // Fetch member data for this event
-        const membersResponse = await fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(member.email)}`);
-        const membersData = await membersResponse.json();
-
-        if (membersResponse.ok && membersData.members) {
-          const memberRecord = membersData.members.find(
-            (m: any) => m.email === member.email && m.event_id === eventId
-          );
-
-          if (memberRecord) {
-            setMemberData(memberRecord);
-            // Check if KYC is complete
-            const kycComplete = !!(
-              memberRecord.kyc_document_type &&
-              memberRecord.kyc_document_number &&
-              memberRecord.kyc_document_url
-            );
-            setIsKYCComplete(kycComplete);
-
-            // Only fetch other data if KYC is complete
-            if (!kycComplete) {
-              setIsLoading(false);
-              return;
-            }
-
-            // Fetch hotel for this event
-            const hotelResponse = await fetch(`/api/hotels?event_id=${eventId}`);
-            const hotelData = await hotelResponse.json();
-
-            if (hotelResponse.ok && hotelData.hotel) {
-              setHotel(hotelData.hotel);
-              
-              // Fetch signed URL for hotel image if it exists
-              if (hotelData.hotel.image_url) {
-                const imageUrl = hotelData.hotel.image_url.trim();
-                // Check if it's already a full URL (starts with http/https or is a data URL)
-                if (imageUrl.startsWith('http://') || 
-                    imageUrl.startsWith('https://') || 
-                    imageUrl.startsWith('data:') ||
-                    imageUrl.startsWith('blob:')) {
-                  // If it's already a URL, use it directly
-                  setHotelImageUrl(imageUrl);
-                } else {
-                  // It's an S3 key, fetch signed URL
-                  try {
-                    const imageUrlResponse = await fetch(`/api/file-url?key=${encodeURIComponent(imageUrl)}`);
-                    const imageUrlData = await imageUrlResponse.json();
-                    if (imageUrlResponse.ok && imageUrlData.url) {
-                      setHotelImageUrl(imageUrlData.url);
-                    } else {
-                      console.error('Failed to fetch hotel image URL:', imageUrlData.message);
-                      // Don't set URL if fetch failed
-                    }
-                  } catch (error) {
-                    console.error('Failed to fetch hotel image URL:', error);
-                    // Don't set URL if fetch failed
-                  }
-                }
-              }
-            }
-
-            // Fetch room assignments for this event
-            const assignmentsResponse = await fetch(`/api/room-assignments?event_id=${eventId}`);
-            const assignmentsData = await assignmentsResponse.json();
-
-            if (assignmentsResponse.ok && assignmentsData.assignments) {
-              // Find this member's room assignment
-              const assignment = assignmentsData.assignments.find(
-                (ra: any) => ra.member_id === memberRecord.id
-              );
-
-              if (assignment) {
-                setRoomAssignment(assignment);
-
-                // Find roommates (other members in the same room)
-                if (assignment.room_number) {
-                  const roomAssignments = assignmentsData.assignments.filter(
-                    (ra: any) => ra.room_number === assignment.room_number &&
-                          ra.member_id !== memberRecord.id
-                  );
-
-                  // Fetch member details for roommates
-                  const roommateIds = roomAssignments.map((ra: any) => ra.member_id);
-                  if (roommateIds.length > 0) {
-                    const roommatePromises = roommateIds.map(async (id: string) => {
-                      const memberResponse = await fetch(`/api/members/${id}`);
-                      const memberData = await memberResponse.json();
-                      return memberResponse.ok ? memberData.member : null;
-                    });
-
-                    const roommateData = (await Promise.all(roommatePromises)).filter(Boolean);
-                    setRoommates(roommateData);
-                  }
-                }
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch stay data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [eventId]);
-
-  // Listen for KYC update events
-  useEffect(() => {
-    const handleKYCUpdate = async () => {
-      const member = getMemberSession();
-      if (!member) return;
-
-      try {
-        const membersResponse = await fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(member.email)}`);
-        const membersData = await membersResponse.json();
-
-        if (membersResponse.ok && membersData.members) {
-          const memberRecord = membersData.members.find(
-            (m: any) => m.email === member.email && m.event_id === eventId
-          );
-
-          if (memberRecord) {
-            const kycComplete = !!(
-              memberRecord.kyc_document_type &&
-              memberRecord.kyc_document_number &&
-              memberRecord.kyc_document_url
-            );
-            setIsKYCComplete(kycComplete);
-            
-            // If KYC is now complete, fetch the data
-            if (kycComplete) {
-              // Reload the page data
-              window.location.reload();
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to refresh KYC status:', error);
-      }
-    };
-
-    window.addEventListener('kyc-updated', handleKYCUpdate);
-    return () => window.removeEventListener('kyc-updated', handleKYCUpdate);
-  }, [eventId]);
-
-  if (isLoading) {
-    return (
-      <MobileContainer>
-        <MobileCard>
-          <MobileCardContent className="py-12 text-center">
-            <p className="text-slate-500">Loading stay information...</p>
-          </MobileCardContent>
-        </MobileCard>
-      </MobileContainer>
-    );
-  }
-
+  // Data is already preloaded from context, no need to fetch
   if (!memberData || !isKYCComplete) {
     return (
       <MobileContainer>

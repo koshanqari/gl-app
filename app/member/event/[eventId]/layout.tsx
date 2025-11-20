@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ArrowLeft, User, Home, Calendar, Plane, UtensilsCrossed, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MobileFooter } from "@/components/mobile";
+import { LoadingScreen } from "@/components/loading-screen";
+import { MemberEventDataProvider } from "@/contexts/member-event-data-context";
 import { useEffect, useState } from "react";
 import { getMemberSession, clearMemberSession, setRedirectUrl, setLastVisitedPage } from "@/lib/auth-cookies";
 
@@ -22,7 +24,12 @@ export default function MemberEventLayout({
   const [event, setEvent] = useState<any>(null);
   const [partner, setPartner] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [isKYCComplete, setIsKYCComplete] = useState(false);
+  const [hotel, setHotel] = useState<any>(null);
+  const [hotelImageUrl, setHotelImageUrl] = useState<string>("");
+  const [roomAssignment, setRoomAssignment] = useState<any>(null);
+  const [roommates, setRoommates] = useState<any[]>([]);
 
   useEffect(() => {
     // Check if member is logged in
@@ -35,61 +42,146 @@ export default function MemberEventLayout({
     }
   }, [router, pathname]);
 
-  // Fetch event, partner, and member data
+  // Preload all data during initial loading
   useEffect(() => {
-    const fetchEventData = async () => {
+    const preloadAllData = async () => {
       try {
         setLoading(true);
+        setLoadingProgress(0);
         const session = getMemberSession();
         if (!session) return;
 
-        // Fetch event data
+        // Step 1: Fetch event data (20%)
+        setLoadingProgress(20);
         const eventResponse = await fetch(`/api/events/${eventId}`);
         const eventData = await eventResponse.json();
 
-        if (eventResponse.ok && eventData.event) {
-          setEvent(eventData.event);
+        if (!eventResponse.ok || !eventData.event) {
+          setLoading(false);
+          return;
+        }
 
-          // Fetch partner data if partner_id exists
-          if (eventData.event.partner_id) {
-            const partnerResponse = await fetch(`/api/partners/${eventData.event.partner_id}`);
-            const partnerData = await partnerResponse.json();
+        setEvent(eventData.event);
 
-            if (partnerResponse.ok) {
-              setPartner(partnerData.partner);
-            }
+        // Step 2: Fetch partner data (30%)
+        setLoadingProgress(30);
+        if (eventData.event.partner_id) {
+          const partnerResponse = await fetch(`/api/partners/${eventData.event.partner_id}`);
+          const partnerData = await partnerResponse.json();
+
+          if (partnerResponse.ok) {
+            setPartner(partnerData.partner);
           }
+        }
 
-          // Fetch member data to check KYC status
-          const membersResponse = await fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(session.email)}`);
-          const membersData = await membersResponse.json();
+        // Step 3: Fetch member data and check KYC (40%)
+        setLoadingProgress(40);
+        const membersResponse = await fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(session.email)}`);
+        const membersData = await membersResponse.json();
 
-          if (membersResponse.ok && membersData.members) {
-            const memberRecord = membersData.members.find(
-              (m: any) => m.email === session.email && m.event_id === eventId
-            );
+        if (!membersResponse.ok || !membersData.members) {
+          setLoading(false);
+          return;
+        }
 
-            if (memberRecord) {
-              setMemberData(memberRecord);
-              // Check if KYC is complete (all 3 fields must be filled)
-              const kycComplete = !!(
-                memberRecord.kyc_document_type &&
-                memberRecord.kyc_document_number &&
-                memberRecord.kyc_document_url
-              );
-              setIsKYCComplete(kycComplete);
+        const memberRecord = membersData.members.find(
+          (m: any) => m.email === session.email && m.event_id === eventId
+        );
+
+        if (!memberRecord) {
+          setLoading(false);
+          return;
+        }
+
+        setMemberData(memberRecord);
+        
+        // Check if KYC is complete
+        const kycComplete = !!(
+          memberRecord.kyc_document_type &&
+          memberRecord.kyc_document_number &&
+          memberRecord.kyc_document_url
+        );
+        setIsKYCComplete(kycComplete);
+
+        // Step 4: Fetch hotel data (60%)
+        setLoadingProgress(60);
+        const hotelResponse = await fetch(`/api/hotels?event_id=${eventId}`);
+        const hotelData = await hotelResponse.json();
+
+        if (hotelResponse.ok && hotelData.hotel) {
+          setHotel(hotelData.hotel);
+          
+          // Fetch signed URL for hotel image if it exists
+          if (hotelData.hotel.image_url) {
+            const imageUrl = hotelData.hotel.image_url.trim();
+            if (imageUrl.startsWith('http://') || 
+                imageUrl.startsWith('https://') || 
+                imageUrl.startsWith('data:') ||
+                imageUrl.startsWith('blob:')) {
+              setHotelImageUrl(imageUrl);
+            } else {
+              try {
+                const imageUrlResponse = await fetch(`/api/file-url?key=${encodeURIComponent(imageUrl)}`);
+                const imageUrlData = await imageUrlResponse.json();
+                if (imageUrlResponse.ok && imageUrlData.url) {
+                  setHotelImageUrl(imageUrlData.url);
+                }
+              } catch (error) {
+                console.error('Failed to fetch hotel image URL:', error);
+              }
             }
           }
         }
+
+        // Step 5: Fetch room assignments (80%)
+        setLoadingProgress(80);
+        if (kycComplete) {
+          const assignmentsResponse = await fetch(`/api/room-assignments?event_id=${eventId}`);
+          const assignmentsData = await assignmentsResponse.json();
+
+          if (assignmentsResponse.ok && assignmentsData.assignments) {
+            const assignment = assignmentsData.assignments.find(
+              (ra: any) => ra.member_id === memberRecord.id
+            );
+
+            if (assignment) {
+              setRoomAssignment(assignment);
+
+              // Fetch roommates if room number exists
+              if (assignment.room_number) {
+                const roomAssignments = assignmentsData.assignments.filter(
+                  (ra: any) => ra.room_number === assignment.room_number &&
+                        ra.member_id !== memberRecord.id
+                );
+
+                const roommateIds = roomAssignments.map((ra: any) => ra.member_id);
+                if (roommateIds.length > 0) {
+                  const roommatePromises = roommateIds.map(async (id: string) => {
+                    const memberResponse = await fetch(`/api/members/${id}`);
+                    const memberData = await memberResponse.json();
+                    return memberResponse.ok ? memberData.member : null;
+                  });
+
+                  const roommateData = (await Promise.all(roommatePromises)).filter(Boolean);
+                  setRoommates(roommateData);
+                }
+              }
+            }
+          }
+        }
+
+        // Step 6: Complete (100%)
+        setLoadingProgress(100);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        setLoading(false);
       } catch (error) {
-        console.error('Failed to fetch event data:', error);
-      } finally {
+        console.error('Failed to preload data:', error);
         setLoading(false);
       }
     };
 
     if (eventId) {
-      fetchEventData();
+      preloadAllData();
     }
   }, [eventId]);
 
@@ -137,12 +229,8 @@ export default function MemberEventLayout({
     router.push("/member/login");
   };
 
-  if (!member || loading || !event) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
-    );
+  if (!member || loading || !event || !memberData) {
+    return <LoadingScreen progress={loadingProgress} />;
   }
 
   const navItems = [
@@ -177,8 +265,18 @@ export default function MemberEventLayout({
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex justify-center">
-      <div className="w-full max-w-lg bg-white min-h-screen flex flex-col relative">
+    <MemberEventDataProvider
+      data={{
+        memberData: memberData || null,
+        hotel: hotel || null,
+        hotelImageUrl: hotelImageUrl || "",
+        roomAssignment: roomAssignment || null,
+        roommates: roommates || [],
+        isKYCComplete: isKYCComplete || false,
+      }}
+    >
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex justify-center">
+        <div className="w-full max-w-lg bg-white min-h-screen flex flex-col relative">
         {/* Header */}
         <header className="bg-white sticky top-0 z-10 shadow-sm flex-shrink-0">
           <div className="px-4 py-3 flex items-center justify-between">
@@ -260,8 +358,9 @@ export default function MemberEventLayout({
             })}
           </div>
         </nav>
+        </div>
       </div>
-    </div>
+    </MemberEventDataProvider>
   );
 }
 
