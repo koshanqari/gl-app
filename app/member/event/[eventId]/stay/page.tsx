@@ -21,7 +21,6 @@ import {
   ExternalLink,
   Mail
 } from "lucide-react";
-import { mockMembers, mockHotels, mockRoomAssignments } from "@/lib/mock-data";
 import { getMemberSession } from "@/lib/auth-cookies";
 
 export default function MemberStayPage() {
@@ -30,50 +29,107 @@ export default function MemberStayPage() {
   const [memberData, setMemberData] = useState<any>(null);
   const [roomAssignment, setRoomAssignment] = useState<any>(null);
   const [hotel, setHotel] = useState<any>(null);
+  const [hotelImageUrl, setHotelImageUrl] = useState<string>("");
   const [roommates, setRoommates] = useState<any[]>([]);
 
   useEffect(() => {
-    // Get member session
-    const member = getMemberSession();
-    if (member) {
-      
-      // Find member data for this event
-      const memberRecord = mockMembers.find(
-        m => m.email === member.email && m.event_id === eventId
-      );
-      
-      if (memberRecord) {
-        setMemberData(memberRecord);
-        
-        // Always load hotel for this event (regardless of room assignment)
-        const eventHotel = mockHotels.find(h => h.event_id === eventId);
-        setHotel(eventHotel);
-        
-        // Find room assignment
-        const assignment = mockRoomAssignments.find(
-          ra => ra.member_id === memberRecord.id && ra.event_id === eventId
-        );
-        
-        if (assignment) {
-          setRoomAssignment(assignment);
-          
-          // Find roommates (other members in the same room)
-          if (assignment.room_number) {
-            const roomAssignments = mockRoomAssignments.filter(
-              ra => ra.event_id === eventId &&
-                    ra.room_number === assignment.room_number &&
-                    ra.member_id !== memberRecord.id
-            );
-            
-            const roommateData = roomAssignments.map(ra => 
-              mockMembers.find(m => m.id === ra.member_id)
-            ).filter(Boolean);
-            
-            setRoommates(roommateData);
+    const fetchData = async () => {
+      // Get member session
+      const member = getMemberSession();
+      if (!member) return;
+
+      try {
+        // Fetch member data for this event
+        const membersResponse = await fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(member.email)}`);
+        const membersData = await membersResponse.json();
+
+        if (membersResponse.ok && membersData.members) {
+          const memberRecord = membersData.members.find(
+            (m: any) => m.email === member.email && m.event_id === eventId
+          );
+
+          if (memberRecord) {
+            setMemberData(memberRecord);
+
+            // Fetch hotel for this event
+            const hotelResponse = await fetch(`/api/hotels?event_id=${eventId}`);
+            const hotelData = await hotelResponse.json();
+
+            if (hotelResponse.ok && hotelData.hotel) {
+              setHotel(hotelData.hotel);
+              
+              // Fetch signed URL for hotel image if it exists
+              if (hotelData.hotel.image_url) {
+                const imageUrl = hotelData.hotel.image_url.trim();
+                // Check if it's already a full URL (starts with http/https or is a data URL)
+                if (imageUrl.startsWith('http://') || 
+                    imageUrl.startsWith('https://') || 
+                    imageUrl.startsWith('data:') ||
+                    imageUrl.startsWith('blob:')) {
+                  // If it's already a URL, use it directly
+                  setHotelImageUrl(imageUrl);
+                } else {
+                  // It's an S3 key, fetch signed URL
+                  try {
+                    const imageUrlResponse = await fetch(`/api/file-url?key=${encodeURIComponent(imageUrl)}`);
+                    const imageUrlData = await imageUrlResponse.json();
+                    if (imageUrlResponse.ok && imageUrlData.url) {
+                      setHotelImageUrl(imageUrlData.url);
+                    } else {
+                      console.error('Failed to fetch hotel image URL:', imageUrlData.message);
+                      // Don't set URL if fetch failed
+                    }
+                  } catch (error) {
+                    console.error('Failed to fetch hotel image URL:', error);
+                    // Don't set URL if fetch failed
+                  }
+                }
+              }
+            }
+
+            // Fetch room assignments for this event
+            const assignmentsResponse = await fetch(`/api/room-assignments?event_id=${eventId}`);
+            const assignmentsData = await assignmentsResponse.json();
+
+            if (assignmentsResponse.ok && assignmentsData.assignments) {
+              // Find this member's room assignment
+              const assignment = assignmentsData.assignments.find(
+                (ra: any) => ra.member_id === memberRecord.id
+              );
+
+              if (assignment) {
+                setRoomAssignment(assignment);
+
+                // Find roommates (other members in the same room)
+                if (assignment.room_number) {
+                  const roomAssignments = assignmentsData.assignments.filter(
+                    (ra: any) => ra.room_number === assignment.room_number &&
+                          ra.member_id !== memberRecord.id
+                  );
+
+                  // Fetch member details for roommates
+                  const roommateIds = roomAssignments.map((ra: any) => ra.member_id);
+                  if (roommateIds.length > 0) {
+                    const roommatePromises = roommateIds.map(async (id: string) => {
+                      const memberResponse = await fetch(`/api/members/${id}`);
+                      const memberData = await memberResponse.json();
+                      return memberResponse.ok ? memberData.member : null;
+                    });
+
+                    const roommateData = (await Promise.all(roommatePromises)).filter(Boolean);
+                    setRoommates(roommateData);
+                  }
+                }
+              }
+            }
           }
         }
+      } catch (error) {
+        console.error('Failed to fetch stay data:', error);
       }
-    }
+    };
+
+    fetchData();
   }, [eventId]);
 
   if (!memberData) {
@@ -177,10 +233,10 @@ export default function MemberStayPage() {
           {hotel ? (
             <div className="space-y-5">
               {/* Hotel Image */}
-              {hotel.image_url && (
+              {hotelImageUrl && (
                 <div className="w-full aspect-video rounded-xl overflow-hidden bg-slate-100">
                   <img
-                    src={hotel.image_url}
+                    src={hotelImageUrl}
                     alt={hotel.hotel_name}
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -224,7 +280,13 @@ export default function MemberStayPage() {
                   value={
                     <div>
                       <p className="text-sm text-slate-900 leading-relaxed">
-                        {hotel.address_street}, {hotel.city}, {hotel.state} {hotel.pincode}, {hotel.country}
+                        {[
+                          hotel.address_street,
+                          hotel.city,
+                          hotel.state,
+                          hotel.pincode,
+                          hotel.country
+                        ].filter(Boolean).join(', ')}
                       </p>
                       {hotel.maps_link && (
                         <Button

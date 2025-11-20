@@ -2,18 +2,22 @@
 
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Save, Calendar } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getEventWithPartner } from "@/lib/mock-data";
+import { FileUpload } from "@/components/ui/file-upload";
 
 export default function EventProfilePage() {
   const params = useParams();
   const eventId = params.eventId as string;
 
-  const eventData = getEventWithPartner(eventId);
+  const [event, setEvent] = useState<any>(null);
+  const [partner, setPartner] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const [formData, setFormData] = useState({
     event_name: "",
@@ -24,29 +28,117 @@ export default function EventProfilePage() {
     end_date: "",
   });
 
-  // Only run when eventId changes, not eventData (which is a new object on each render)
   useEffect(() => {
-    if (eventData) {
-      const { partner, ...event } = eventData;
-      setFormData({
-        event_name: event.event_name || "",
-        event_type: event.event_type || "",
-        description: event.description || "",
-        logo_url: event.logo_url || "",
-        start_date: event.start_date || "",
-        end_date: event.end_date || "",
-      });
-    }
+    fetchEventData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
-  const handleSave = () => {
-    // TODO: Save the updated event data
-    console.log("Saving event data:", formData);
-    alert("Event profile updated! (This will be connected to backend)");
+  const fetchEventData = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      // Fetch event data
+      const eventResponse = await fetch(`/api/events/${eventId}`);
+      const eventData = await eventResponse.json();
+
+      if (!eventResponse.ok) {
+        setError(eventData.message || "Failed to fetch event");
+        setLoading(false);
+        return;
+      }
+
+      const fetchedEvent = eventData.event;
+      setEvent(fetchedEvent);
+
+      // Set form data
+      setFormData({
+        event_name: fetchedEvent.event_name || "",
+        event_type: fetchedEvent.event_type || "",
+        description: fetchedEvent.description || "",
+        logo_url: fetchedEvent.logo_url || "",
+        start_date: fetchedEvent.start_date ? fetchedEvent.start_date.split('T')[0] : "",
+        end_date: fetchedEvent.end_date ? fetchedEvent.end_date.split('T')[0] : "",
+      });
+
+      // Fetch partner data if partner_id exists
+      if (fetchedEvent.partner_id) {
+        const partnerResponse = await fetch(`/api/partners/${fetchedEvent.partner_id}`);
+        const partnerData = await partnerResponse.json();
+
+        if (partnerResponse.ok) {
+          setPartner(partnerData.partner);
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch event data:", err);
+      setError("Failed to load event data. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (!eventData || !eventData.partner) {
+  const handleSave = async () => {
+    if (!formData.event_name || !formData.start_date || !formData.end_date) {
+      alert("Please fill in all required fields (Event Name, Start Date, End Date)");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      const response = await fetch(`/api/events/${eventId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || "Failed to update event");
+        alert(data.message || "Failed to update event");
+        return;
+      }
+
+      // Refresh event data
+      await fetchEventData();
+      alert("Event profile updated successfully!");
+    } catch (err: any) {
+      console.error("Failed to save event:", err);
+      setError("Failed to save event. Please try again.");
+      alert("Failed to save event. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-12 text-center">
+          <Loader2 className="h-8 w-8 mx-auto text-slate-400 animate-spin mb-4" />
+          <p className="text-slate-500">Loading event data...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error && !event) {
+    return (
+      <Card>
+        <CardContent className="p-12 text-center">
+          <p className="text-red-500 mb-4">{error}</p>
+          <Button onClick={fetchEventData}>Retry</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!event) {
     return (
       <Card>
         <CardContent className="p-12 text-center">
@@ -55,8 +147,6 @@ export default function EventProfilePage() {
       </Card>
     );
   }
-
-  const { partner } = eventData;
 
   return (
     <div className="space-y-6">
@@ -68,9 +158,18 @@ export default function EventProfilePage() {
             View and manage event information
           </p>
         </div>
-        <Button onClick={handleSave}>
-          <Save className="mr-2 h-4 w-4" />
-          Save Changes
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              Save Changes
+            </>
+          )}
         </Button>
       </div>
 
@@ -102,14 +201,16 @@ export default function EventProfilePage() {
             </div>
 
             <div>
-              <Label htmlFor="logo_url">Event Logo URL</Label>
-              <Input
-                id="logo_url"
-                type="url"
+              <Label htmlFor="logo_url">Event Logo</Label>
+              <FileUpload
                 value={formData.logo_url}
-                onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                placeholder="https://example.com/logo.png"
+                onChange={(url) => setFormData({ ...formData, logo_url: url })}
+                folder="events"
+                accept="image/*"
+                maxSize={5 * 1024 * 1024}
+                fileType="image"
               />
+              <p className="text-xs text-slate-500 mt-1">Upload JPG, PNG (max 5MB)</p>
             </div>
 
             <div className="col-span-2">
@@ -160,41 +261,45 @@ export default function EventProfilePage() {
       </Card>
 
       {/* Partner Information (Read-only) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Partner Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">Company Name</p>
-              <p className="text-slate-900">{partner.company_name}</p>
-            </div>
+      {partner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Partner Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Company Name</p>
+                <p className="text-slate-900">{partner.company_name}</p>
+              </div>
 
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">Industry Type</p>
-              <p className="text-slate-900">{partner.industry_type}</p>
-            </div>
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Industry Type</p>
+                <p className="text-slate-900">{partner.industry_type}</p>
+              </div>
 
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">Company Size</p>
-              <p className="text-slate-900">{partner.company_size}</p>
-            </div>
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Company Size</p>
+                <p className="text-slate-900">{partner.company_size}</p>
+              </div>
 
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">Website</p>
-              <a 
-                href={partner.website} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                {partner.website}
-              </a>
+              {partner.website && (
+                <div>
+                  <p className="text-sm font-medium text-slate-500 mb-1">Website</p>
+                  <a 
+                    href={partner.website} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    {partner.website}
+                  </a>
+                </div>
+              )}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Event Metadata */}
       <Card className="border-slate-200 bg-slate-50">

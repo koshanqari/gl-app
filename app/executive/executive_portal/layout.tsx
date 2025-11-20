@@ -6,7 +6,6 @@ import { Building2, LogOut, User, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingScreen } from "@/components/loading-screen";
 import { ExecutiveFooter } from "@/components/executive-footer";
-import { getPartnersWithEventCount } from "@/lib/mock-data";
 import { getExecutiveSession, clearExecutiveSession, setRedirectUrl, setLastVisitedPage } from "@/lib/auth-cookies";
 import { RefreshProvider, useRefresh } from "@/contexts/refresh-context";
 
@@ -53,7 +52,16 @@ function ExecutivePortalContent({ children }: { children: React.ReactNode }) {
       try {
         // Step 1: Preload partner data (20%)
         setLoadingProgress(20);
-        const partners = getPartnersWithEventCount();
+        let partners: any[] = [];
+        try {
+          const response = await fetch('/api/partners');
+          if (response.ok) {
+            const data = await response.json();
+            partners = data.partners || [];
+          }
+        } catch (error) {
+          console.error('Failed to fetch partners for prefetching:', error);
+        }
         await new Promise(resolve => setTimeout(resolve, 200));
 
         // Step 2: Prefetch routes (30-90%)

@@ -65,7 +65,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     // Get executive session from cookies (server-side)
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const executiveSession = cookieStore.get('executive-session')?.value;
     
     if (!executiveSession) {

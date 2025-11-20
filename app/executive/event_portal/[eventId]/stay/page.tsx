@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Home, Building2, Users, Bed, CheckCircle, Search, Plus, X, FileText, Upload, Download, ChevronDown, Loader2 } from "lucide-react";
+import { Home, Building2, Users, Bed, CheckCircle, Search, Plus, X, FileText, Upload, Download, ChevronDown, Loader2, Phone, Mail } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,9 +16,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getHotelByEventId, getRoomAssignmentsByEventId, getEventById } from "@/lib/mock-data";
 import { RoomAssignmentDialog, CheckInRecord } from "@/components/room-assignment-dialog";
 import { AddressInput } from "@/components/ui/address-input";
+import { FileUpload } from "@/components/ui/file-upload";
 import { useRefresh } from "@/contexts/refresh-context";
 
 type Tab = "assignments" | "hotel";
@@ -50,10 +50,8 @@ export default function StayManagementPage() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingAssignments, setLoadingAssignments] = useState(true);
-
-  // Get data (mock for now - will be replaced with API)
-  const event = getEventById(eventId);
-  const hotel = getHotelByEventId(eventId);
+  const [hotel, setHotel] = useState<any>(null);
+  const [loadingHotel, setLoadingHotel] = useState(true);
 
   // Fetch members from API
   const fetchMembers = useCallback(async () => {
@@ -93,38 +91,85 @@ export default function StayManagementPage() {
     }
   }, [eventId]);
 
+  // Fetch hotel from API
+  const fetchHotel = useCallback(async () => {
+    try {
+      setLoadingHotel(true);
+      const response = await fetch(`/api/hotels?event_id=${eventId}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setHotel(data.hotel);
+        // Update form data when hotel is loaded
+        if (data.hotel) {
+          setHotelData({
+            hotel_name: data.hotel.hotel_name || "",
+            star_rating: data.hotel.star_rating || 3,
+            image_url: data.hotel.image_url || "",
+            website: data.hotel.website || "",
+            address_street: data.hotel.address_street || "",
+            city: data.hotel.city || "",
+            state: data.hotel.state || "",
+            country: data.hotel.country || "IN",
+            pincode: data.hotel.pincode || "",
+            maps_link: data.hotel.maps_link || "",
+            additional_details: data.hotel.additional_details || "",
+          });
+          setHotelPOCs(
+            data.hotel.pocs && data.hotel.pocs.length > 0
+              ? data.hotel.pocs.map((poc: any) => ({
+                  name: poc.name || "",
+                  phone: poc.phone || "",
+                  email: poc.email || "",
+                  poc_for: poc.poc_for || "",
+                  display_for_members: poc.display_for_members || false,
+                }))
+              : [{ name: "", phone: "", email: "", poc_for: "", display_for_members: false }]
+          );
+          setServices(
+            data.hotel.amenities && data.hotel.amenities.length > 0
+              ? data.hotel.amenities
+              : [""]
+          );
+        }
+      } else {
+        console.error('Failed to fetch hotel:', data.message);
+      }
+    } catch (error) {
+      console.error('Failed to fetch hotel:', error);
+    } finally {
+      setLoadingHotel(false);
+    }
+  }, [eventId]);
+
   // Fetch members and assignments on mount and when refresh is triggered
   useEffect(() => {
     fetchMembers();
     fetchRoomAssignments();
-  }, [fetchMembers, fetchRoomAssignments, refreshKey]);
+    fetchHotel();
+  }, [fetchMembers, fetchRoomAssignments, fetchHotel, refreshKey]);
 
   // Hotel form state
   const [hotelData, setHotelData] = useState({
-    hotel_name: hotel?.hotel_name || "",
-    star_rating: hotel?.star_rating || 3,
-    image_url: hotel?.image_url || "",
-    website: hotel?.website || "",
-    address_street: hotel?.address_street || "",
-    city: hotel?.city || "",
-    state: hotel?.state || "",
-    country: hotel?.country || "IN",
-    pincode: hotel?.pincode || "",
-    maps_link: hotel?.maps_link || "",
-    additional_details: hotel?.additional_details || "",
+    hotel_name: "",
+    star_rating: 3,
+    image_url: "",
+    website: "",
+    address_street: "",
+    city: "",
+    state: "",
+    country: "IN",
+    pincode: "",
+    maps_link: "",
+    additional_details: "",
   });
 
-  const [hotelPOCs, setHotelPOCs] = useState<HotelPOC[]>(
-    hotel?.pocs && hotel.pocs.length > 0
-      ? hotel.pocs
-      : [{ name: "", phone: "", email: "", poc_for: "", display_for_members: false }]
-  );
+  const [hotelPOCs, setHotelPOCs] = useState<HotelPOC[]>([
+    { name: "", phone: "", email: "", poc_for: "", display_for_members: false }
+  ]);
 
-  const [services, setServices] = useState<string[]>(
-    hotel?.amenities && hotel.amenities.length > 0
-      ? hotel.amenities
-      : [""]
-  );
+  const [services, setServices] = useState<string[]>([""]);
+  const [savingHotel, setSavingHotel] = useState(false);
 
   const handleAddService = () => {
     setServices([...services, ""]);
@@ -158,10 +203,54 @@ export default function StayManagementPage() {
     setHotelPOCs(newPOCs);
   };
 
-  const handleSaveHotel = () => {
+  const handleSaveHotel = async () => {
+    if (!hotelData.hotel_name) {
+      alert("Hotel name is required");
+      return;
+    }
+
     const filteredServices = services.filter(service => service.trim() !== "");
-    console.log("Saving hotel:", { ...hotelData, pocs: hotelPOCs, amenities: filteredServices });
-    alert("Hotel details saved! (Will be connected to backend)");
+    
+    setSavingHotel(true);
+    try {
+      const payload = {
+        event_id: eventId,
+        ...hotelData,
+        pocs: hotelPOCs,
+        amenities: filteredServices,
+      };
+      
+      console.log('Saving hotel with image_url:', hotelData.image_url);
+      
+      const response = await fetch('/api/hotels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Save failed:', data);
+        alert(data.message || "Failed to save hotel details");
+        setSavingHotel(false);
+        return;
+      }
+
+      console.log('Hotel saved successfully, refreshing...');
+      
+      // Refresh hotel data to show updated image
+      await fetchHotel();
+      
+      alert("Hotel details saved successfully!");
+    } catch (error) {
+      console.error('Failed to save hotel:', error);
+      alert("Failed to save hotel details. Please try again.");
+    } finally {
+      setSavingHotel(false);
+    }
   };
 
   const handleMemberClick = (member: any) => {
@@ -203,7 +292,18 @@ export default function StayManagementPage() {
 
   const handleDownloadCSV = () => {
     // Create CSV content with headers
-    const headers = ["Check-in", "Time", "Member", "Employee ID", "KYC", "Room Number", "Room Type"];
+    const headers = [
+      "Check-in",
+      "Time",
+      "Member",
+      "Employee ID",
+      "KYC Status",
+      "KYC Type",
+      "KYC Number",
+      "KYC Document Link",
+      "Room Number",
+      "Room Type"
+    ];
     
     // Create rows from member assignments
     const rows = memberAssignments.map((member) => {
@@ -217,22 +317,38 @@ export default function StayManagementPage() {
           })
         : '';
       
+      // Check if KYC is complete (all 3 fields filled)
+      const kycComplete = member.kyc_document_type && member.kyc_document_type.trim() !== '' &&
+                          member.kyc_document_number && member.kyc_document_number.trim() !== '' &&
+                          member.kyc_document_url && member.kyc_document_url.trim() !== '';
+      
+      // Create clickable link for KYC document
+      const kycDocumentLink = member.kyc_document_url 
+        ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/view-document?key=${encodeURIComponent(member.kyc_document_url)}`
+        : '';
+      
       return [
         isCheckedIn ? 'Yes' : 'No',
         checkInTime,
-        member.name,
-        member.employee_id,
-        member.kyc_document_type ? 'Completed' : 'Pending',
+        member.name || '',
+        member.employee_id || '',
+        kycComplete ? 'Complete' : 'Incomplete',
+        member.kyc_document_type || '',
+        member.kyc_document_number || '',
+        kycDocumentLink,
         member.room_number || '',
         member.room_type || '',
-      ];
+      ].map(cell => {
+        const escaped = String(cell).replace(/"/g, '""');
+        return `"${escaped}"`;
+      });
     });
 
-    // Combine headers and rows
+    // Combine headers and rows with Windows line endings
     const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
+      headers.map(h => `"${h}"`).join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\r\n');
 
     // Create and download file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -246,66 +362,164 @@ export default function StayManagementPage() {
     document.body.removeChild(link);
   };
 
-  const handleUploadCSV = () => {
+  const handleUploadCSV = async () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.csv';
-    input.onchange = (e: any) => {
+    input.onchange = async (e: any) => {
       const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (event: any) => {
-          const csvData = event.target.result;
-          const lines = csvData.split('\n');
-          
-          // Skip header row
-          const dataLines = lines.slice(1).filter((line: string) => line.trim() !== '');
-          
-          let updatedCount = 0;
-          dataLines.forEach((line: string) => {
-            const values = line.split(',').map((val: string) => val.replace(/"/g, '').trim());
-            
-            if (values.length >= 7) {
-              const [checkInStatus, checkInTime, memberName, empId, kycStatus, roomNumber, roomType] = values;
-              
-              // Find member by employee ID
-              const member = members.find(m => m.employee_id === empId);
-              if (member) {
-                // Update check-in status
-                if (checkInStatus.toLowerCase() === 'yes') {
-                  setCheckedInMembers(prev => {
-                    const newSet = new Set(prev);
-                    newSet.add(member.id);
-                    return newSet;
-                  });
-                  
-                  // Add check-in record if there's a time
-                  if (checkInTime) {
-                    setCheckInRecords(prev => {
-                      const newRecords = new Map(prev);
-                      const existing = newRecords.get(member.id) || [];
-                      if (existing.length === 0) {
-                        newRecords.set(member.id, [{
-                          timestamp: new Date().toISOString(),
-                          action: 'check-in',
-                        }]);
-                      }
-                      return newRecords;
-                    });
-                  }
-                }
-                
-                // Note: In a real app, we would update the backend here
-                // For now, we'll just show a success message
-                console.log(`Updated: ${memberName} - Room: ${roomNumber}, Type: ${roomType}`);
-                updatedCount++;
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter((line: string) => line.trim());
+        
+        if (lines.length < 2) {
+          alert('CSV file is empty or invalid');
+          return;
+        }
+
+        // Parse header row
+        const headers = lines[0].split(',').map((h: string) => h.trim().replace(/^"|"$/g, ''));
+        
+        // Find column indices
+        const getHeaderIndex = (name: string) => {
+          return headers.findIndex((h: string) => h.toLowerCase().replace(' (optional)', '') === name.toLowerCase());
+        };
+
+        const checkInIdx = getHeaderIndex('Check-in');
+        const timeIdx = getHeaderIndex('Time');
+        const memberIdx = getHeaderIndex('Member');
+        const empIdIdx = getHeaderIndex('Employee ID');
+        const roomNumberIdx = getHeaderIndex('Room Number');
+        const roomTypeIdx = getHeaderIndex('Room Type');
+
+        if (empIdIdx === -1) {
+          alert('Invalid CSV format. Employee ID column is required.');
+          return;
+        }
+
+        let updatedCount = 0;
+        const errors: string[] = [];
+
+        // Parse data rows
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          if (!line.trim()) continue;
+
+          // Parse CSV row (handle quoted values)
+          const values: string[] = [];
+          let current = '';
+          let inQuotes = false;
+
+          for (let j = 0; j < line.length; j++) {
+            const char = line[j];
+            if (char === '"') {
+              if (inQuotes && line[j + 1] === '"') {
+                current += '"';
+                j++; // Skip next quote
+              } else {
+                inQuotes = !inQuotes;
+              }
+            } else if (char === ',' && !inQuotes) {
+              values.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          values.push(current.trim()); // Add last value
+
+          if (values.length < headers.length) {
+            errors.push(`Row ${i + 1}: Not enough columns`);
+            continue;
+          }
+
+          const empId = values[empIdIdx]?.replace(/^"|"$/g, '') || '';
+          if (!empId) continue;
+
+          const member = members.find(m => m.employee_id === empId);
+          if (!member) {
+            errors.push(`Row ${i + 1}: Member with Employee ID "${empId}" not found`);
+            continue;
+          }
+
+          try {
+            // Update room assignment
+            const roomNumber = roomNumberIdx >= 0 ? (values[roomNumberIdx]?.replace(/^"|"$/g, '') || '') : '';
+            const roomType = roomTypeIdx >= 0 ? (values[roomTypeIdx]?.replace(/^"|"$/g, '') || '') : '';
+
+            if (roomNumber || roomType) {
+              const response = await fetch('/api/room-assignments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  member_id: member.id,
+                  event_id: eventId,
+                  room_number: roomNumber || null,
+                  room_type: roomType || null,
+                }),
+              });
+
+              if (!response.ok) {
+                errors.push(`Row ${i + 1}: Failed to update room assignment for ${empId}`);
+                continue;
               }
             }
-          });
-          
-          alert(`Successfully processed ${updatedCount} room assignments!\n\nNote: This is a demo. In production, room assignments would be saved to the backend.`);
-        };
-        reader.readAsText(file);
+
+            // Update check-in status
+            const checkInStatus = checkInIdx >= 0 ? (values[checkInIdx]?.replace(/^"|"$/g, '').toLowerCase() || '') : '';
+            if (checkInStatus === 'yes') {
+              setCheckedInMembers(prev => {
+                const newSet = new Set(prev);
+                newSet.add(member.id);
+                return newSet;
+              });
+
+              const checkInTime = timeIdx >= 0 ? (values[timeIdx]?.replace(/^"|"$/g, '') || '') : '';
+              if (checkInTime) {
+                setCheckInRecords(prev => {
+                  const newRecords = new Map(prev);
+                  const existing = newRecords.get(member.id) || [];
+                  if (existing.length === 0) {
+                    newRecords.set(member.id, [{
+                      timestamp: new Date().toISOString(),
+                      action: 'check-in',
+                    }]);
+                  }
+                  return newRecords;
+                });
+              }
+            } else if (checkInStatus === 'no') {
+              setCheckedInMembers(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(member.id);
+                return newSet;
+              });
+            }
+
+            updatedCount++;
+          } catch (error) {
+            errors.push(`Row ${i + 1}: Error processing ${empId} - ${error}`);
+          }
+        }
+
+        // Refresh data
+        await fetchRoomAssignments();
+        await fetchMembers();
+
+        // Show summary
+        let message = `Successfully processed ${updatedCount} record(s).`;
+        if (errors.length > 0) {
+          message += `\n\nErrors (${errors.length}):\n${errors.slice(0, 5).join('\n')}`;
+          if (errors.length > 5) {
+            message += `\n... and ${errors.length - 5} more errors.`;
+          }
+        }
+        alert(message);
+      } catch (error) {
+        console.error('CSV upload error:', error);
+        alert('Failed to process CSV file. Please check the format and try again.');
       }
     };
     input.click();
@@ -375,8 +589,8 @@ export default function StayManagementPage() {
         ...member,
         room_number: assignment?.room_number || null,
         room_type: assignment?.room_type || null,
-        check_in_date: assignment?.check_in_date || event?.start_date || "",
-        check_out_date: assignment?.check_out_date || event?.end_date || "",
+        check_in_date: assignment?.check_in_date || (event as any)?.start_date || "",
+        check_out_date: assignment?.check_out_date || (event as any)?.end_date || "",
         sharing_with: roommates.length > 0 ? roommates.join(", ") : "Solo",
         sharing_count: assignment?.room_number ? roommates.length + 1 : 1, // Include current member in count only if assigned
         special_requests: assignment?.special_requests || "",
@@ -411,10 +625,12 @@ export default function StayManagementPage() {
       );
     }
 
-    // Apply KYC filter
+    // Apply KYC filter - ALL 3 fields required for completed
     if (kycFilter !== "all") {
       filtered = filtered.filter((member) =>
-        kycFilter === "completed" ? member.kyc_document_type : !member.kyc_document_type
+        kycFilter === "completed" 
+          ? (member.kyc_document_type && member.kyc_document_number && member.kyc_document_url)
+          : (!member.kyc_document_type || !member.kyc_document_number || !member.kyc_document_url)
       );
     }
 
@@ -645,6 +861,7 @@ export default function StayManagementPage() {
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Check-in</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Member</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Employee ID</th>
+                        <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Contact</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">KYC</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Room No.</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Room Type</th>
@@ -672,14 +889,32 @@ export default function StayManagementPage() {
                         </td>
                         <td className="p-3 text-sm text-slate-700">{member.employee_id}</td>
                         <td className="p-3">
-                          {member.kyc_document_type ? (
+                          <div className="text-xs text-slate-600 space-y-0.5">
+                            <div className="flex items-center gap-1">
+                              <Phone className="h-3 w-3 text-slate-400" />
+                              <span>{member.country_code} {member.phone}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Mail className="h-3 w-3 text-slate-400" />
+                              <span className="truncate max-w-[200px]" title={member.email}>{member.email}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          {member.kyc_document_type && member.kyc_document_number && member.kyc_document_url ? (
                             <Badge 
                               variant="default" 
                               className="bg-green-100 text-green-700 hover:bg-green-200 cursor-pointer"
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                if (member.kyc_document_url) {
-                                  window.open(member.kyc_document_url, '_blank');
+                                try {
+                                  const response = await fetch(`/api/file-url?key=${encodeURIComponent(member.kyc_document_url)}`);
+                                  const data = await response.json();
+                                  if (response.ok) {
+                                    window.open(data.url, '_blank');
+                                  }
+                                } catch (error) {
+                                  console.error('Failed to open file:', error);
                                 }
                               }}
                             >
@@ -688,7 +923,7 @@ export default function StayManagementPage() {
                             </Badge>
                           ) : (
                             <Badge variant="secondary" className="bg-orange-100 text-orange-700 hover:bg-orange-100">
-                              Pending
+                              Incomplete
                             </Badge>
                           )}
                         </td>
@@ -771,59 +1006,15 @@ export default function StayManagementPage() {
                 {/* Hotel Image */}
                 <div className="space-y-2">
                   <Label>Hotel Image</Label>
-                  <div className="flex gap-2">
-                    <div className="flex-1 space-y-2">
-                      <Input
-                        id="image_url"
-                        value={hotelData.image_url}
-                        onChange={(e) => setHotelData({ ...hotelData, image_url: e.target.value })}
-                        placeholder="Paste image URL or upload below"
-                      />
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              // In production, this would upload to a file storage service
-                              // For now, we'll create a local preview URL
-                              const previewUrl = URL.createObjectURL(file);
-                              setHotelData({ ...hotelData, image_url: previewUrl });
-                              console.log("File selected:", file.name, "Size:", file.size);
-                            }
-                          }}
-                          className="flex-1"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-                            if (input) {
-                              input.value = '';
-                              setHotelData({ ...hotelData, image_url: '' });
-                            }
-                          }}
-                        >
-                          Clear
-                        </Button>
-                      </div>
-                    </div>
-                    {hotelData.image_url && (
-                      <div className="w-32 h-32 border rounded-lg overflow-hidden flex-shrink-0">
-                        <img
-                          src={hotelData.image_url}
-                          alt="Hotel preview"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23f1f5f9" width="100" height="100"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%2394a3b8" font-size="12"%3ENo Image%3C/text%3E%3C/svg%3E';
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
+                  <FileUpload
+                    value={hotelData.image_url}
+                    onChange={(url) => setHotelData({ ...hotelData, image_url: url })}
+                    folder="hotels"
+                    accept="image/*"
+                    maxSize={5 * 1024 * 1024}
+                    fileType="image"
+                  />
+                  <p className="text-xs text-slate-500">Upload JPG, PNG (max 5MB)</p>
                 </div>
 
                 {/* Website */}
@@ -998,9 +1189,18 @@ export default function StayManagementPage() {
 
             {/* Save Button */}
             <div className="flex justify-end pt-4 border-t">
-              <Button onClick={handleSaveHotel}>
-                <Home className="mr-2 h-4 w-4" />
-                Save Hotel Details
+              <Button onClick={handleSaveHotel} disabled={savingHotel}>
+                {savingHotel ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Home className="mr-2 h-4 w-4" />
+                    Save Hotel Details
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>

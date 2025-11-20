@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { MobileFooter } from "@/components/mobile";
 import { Calendar, MapPin, Building2, ArrowRight, LogOut } from "lucide-react";
 import { LoadingScreen } from "@/components/loading-screen";
-import { mockEvents, mockMembers } from "@/lib/mock-data";
 import { getMemberSession, clearMemberSession, setRedirectUrl, setLastVisitedPage } from "@/lib/auth-cookies";
 
 export default function MemberEventsPage() {
@@ -51,12 +50,28 @@ export default function MemberEventsPage() {
       try {
         // Step 1: Load member events (30%)
         setLoadingProgress(30);
-        const memberRecord = mockMembers.find(m => m.email === member.email);
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        if (memberRecord) {
-          // Get events this member is registered for
-          const events = mockEvents.filter(e => e.id === memberRecord.event_id);
+        
+        // Fetch all members with this email to get all event_ids
+        const membersResponse = await fetch(`/api/members?email=${encodeURIComponent(member.email)}`);
+        const membersData = await membersResponse.json();
+        
+        if (membersResponse.ok && membersData.members) {
+          // Get unique event IDs
+          const eventIds: string[] = [...new Set(membersData.members.map((m: any) => m.event_id).filter(Boolean) as string[])];
+          
+          // Fetch each event
+          const eventPromises = eventIds.map(async (eventId: string) => {
+            try {
+              const eventResponse = await fetch(`/api/events/${eventId}`);
+              const eventData = await eventResponse.json();
+              return eventResponse.ok ? eventData.event : null;
+            } catch (error) {
+              console.error(`Failed to fetch event ${eventId}:`, error);
+              return null;
+            }
+          });
+          
+          const events = (await Promise.all(eventPromises)).filter(Boolean);
           setMemberEvents(events);
         }
 
@@ -96,10 +111,10 @@ export default function MemberEventsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-lg mx-auto bg-white min-h-screen">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="max-w-lg mx-auto bg-white min-h-screen flex flex-col">
         {/* Mobile Header */}
-        <header className="bg-white sticky top-0 z-10 shadow-sm">
+        <header className="bg-white sticky top-0 z-10 shadow-sm flex-shrink-0">
           <div className="px-5 py-4 flex items-center justify-between">
             <div className="flex-1 min-w-0 mr-3">
               <h1 className="text-xl font-bold text-slate-900">My Events</h1>
@@ -117,7 +132,8 @@ export default function MemberEventsPage() {
         </header>
 
         {/* Content */}
-        <div className="px-4 pt-3 pb-6 space-y-3 bg-slate-50">
+        <div className="flex-1 overflow-y-auto bg-slate-50 flex flex-col">
+          <div className="px-4 pt-3 pb-6 space-y-3 flex-1">
           {memberEvents.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6">
               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
@@ -127,7 +143,7 @@ export default function MemberEventsPage() {
                 No Events Yet
               </h3>
               <p className="text-sm text-slate-500 text-center max-w-xs">
-                You'll see your registered events here once they're available
+                You&apos;ll see your registered events here once they&apos;re available
               </p>
             </div>
           ) : (
@@ -170,8 +186,11 @@ export default function MemberEventsPage() {
               </div>
             ))
           )}
+          </div>
+          <div className="mt-auto">
+            <MobileFooter />
+          </div>
         </div>
-        <MobileFooter />
       </div>
     </div>
   );

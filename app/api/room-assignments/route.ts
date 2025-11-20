@@ -57,7 +57,7 @@ export async function GET(request: Request) {
 // POST create or update room assignment
 export async function POST(request: Request) {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const executiveSession = cookieStore.get('executive-session')?.value;
     
     if (!executiveSession) {

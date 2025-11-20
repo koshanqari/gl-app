@@ -88,7 +88,7 @@ export default function AdminPanelPage() {
 
       if (response.ok) {
         setSuccess(`Executive ${formData.name} added successfully!`);
-        setFormData({ email: "", name: "", phone: "", password: "" });
+        setFormData({ email: "", name: "", country_code: "+91", phone: "", password: "" });
         fetchExecutives();
       } else if (response.status === 401) {
         router.push('/secret');

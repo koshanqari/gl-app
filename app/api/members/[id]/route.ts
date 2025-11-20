@@ -3,9 +3,9 @@ import pool from '@/lib/db';
 import { cookies } from 'next/headers';
 
 // GET single member by ID
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     const client = await pool.connect();
     
@@ -46,20 +46,21 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 // PUT update member
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Get session from cookies (server-side)
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const executiveSession = cookieStore.get('executive-session')?.value;
+    const memberSession = cookieStore.get('member-session')?.value;
     
-    if (!executiveSession) {
+    if (!executiveSession && !memberSession) {
       return NextResponse.json({
         status: 'error',
         message: 'Unauthorized - No session found',
       }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const {
       employee_id,
@@ -145,10 +146,10 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 }
 
 // DELETE member (soft delete)
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Get session from cookies (server-side)
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const executiveSession = cookieStore.get('executive-session')?.value;
     
     if (!executiveSession) {
@@ -158,7 +159,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     
     const client = await pool.connect();
     

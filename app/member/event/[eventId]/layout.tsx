@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ArrowLeft, User, Home, Calendar, Plane, UtensilsCrossed, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MobileFooter } from "@/components/mobile";
-import { getEventWithPartner } from "@/lib/mock-data";
 import { useEffect, useState } from "react";
 import { getMemberSession, clearMemberSession, setRedirectUrl, setLastVisitedPage } from "@/lib/auth-cookies";
 
@@ -19,6 +18,9 @@ export default function MemberEventLayout({
   const pathname = usePathname();
   const eventId = params.eventId as string;
   const [member, setMember] = useState<any>(null);
+  const [event, setEvent] = useState<any>(null);
+  const [partner, setPartner] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Check if member is logged in
@@ -30,6 +32,40 @@ export default function MemberEventLayout({
       setMember(session);
     }
   }, [router, pathname]);
+
+  // Fetch event and partner data
+  useEffect(() => {
+    const fetchEventData = async () => {
+      try {
+        setLoading(true);
+        // Fetch event data
+        const eventResponse = await fetch(`/api/events/${eventId}`);
+        const eventData = await eventResponse.json();
+
+        if (eventResponse.ok && eventData.event) {
+          setEvent(eventData.event);
+
+          // Fetch partner data if partner_id exists
+          if (eventData.event.partner_id) {
+            const partnerResponse = await fetch(`/api/partners/${eventData.event.partner_id}`);
+            const partnerData = await partnerResponse.json();
+
+            if (partnerResponse.ok) {
+              setPartner(partnerData.partner);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch event data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (eventId) {
+      fetchEventData();
+    }
+  }, [eventId]);
 
   // Track last visited page
   useEffect(() => {
@@ -43,14 +79,13 @@ export default function MemberEventLayout({
     router.push("/member/login");
   };
 
-  // Get event details
-  const eventData = getEventWithPartner(eventId);
-
-  if (!member || !eventData) {
-    return null;
+  if (!member || loading || !event) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
   }
-
-  const { partner, ...event } = eventData;
 
   const navItems = [
     {
@@ -84,10 +119,10 @@ export default function MemberEventLayout({
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex justify-center">
       <div className="w-full max-w-lg bg-white min-h-screen flex flex-col relative">
         {/* Header */}
-        <header className="bg-white sticky top-0 z-10 shadow-sm">
+        <header className="bg-white sticky top-0 z-10 shadow-sm flex-shrink-0">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <Button
@@ -119,9 +154,13 @@ export default function MemberEventLayout({
         </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pb-20 bg-slate-50">
-        {children}
-        <MobileFooter />
+      <main className="flex-1 overflow-y-auto bg-slate-50 pb-20 flex flex-col">
+        <div className="flex-1">
+          {children}
+        </div>
+        <div className="mt-auto">
+          <MobileFooter />
+        </div>
       </main>
 
       {/* Bottom Navigation */}

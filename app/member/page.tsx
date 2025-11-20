@@ -24,9 +24,9 @@ export default function MemberPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
       <div className="w-full max-w-md mx-auto text-center">
-        <p className="text-slate-500">Loading...</p>
+        <p className="text-white">Loading...</p>
       </div>
     </div>
   );

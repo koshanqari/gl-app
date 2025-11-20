@@ -7,6 +7,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const eventId = searchParams.get('event_id');
+    const email = searchParams.get('email');
 
     const client = await pool.connect();
     
@@ -21,10 +22,18 @@ export async function GET(request: Request) {
       `;
       
       const params: any[] = [];
+      let paramCount = 0;
       
       if (eventId) {
-        query += ` AND event_id = $1`;
+        paramCount++;
+        query += ` AND event_id = $${paramCount}`;
         params.push(eventId);
+      }
+      
+      if (email) {
+        paramCount++;
+        query += ` AND email = $${paramCount}`;
+        params.push(email);
       }
       
       query += ` ORDER BY employee_id ASC`;
@@ -53,7 +62,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // Get session from cookies (server-side)
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const executiveSession = cookieStore.get('executive-session')?.value;
     
     if (!executiveSession) {

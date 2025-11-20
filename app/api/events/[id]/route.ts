@@ -5,10 +5,10 @@ import { cookies } from 'next/headers';
 // GET single event
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const client = await pool.connect();
     
@@ -50,11 +50,11 @@ export async function GET(
 // PUT update event
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get executive session from cookies (server-side)
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const executiveSession = cookieStore.get('executive-session')?.value;
     
     if (!executiveSession) {
@@ -74,7 +74,7 @@ export async function PUT(
       }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const {
       event_name,
@@ -140,11 +140,11 @@ export async function PUT(
 // DELETE soft delete event (set is_active = false)
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get executive session from cookies (server-side)
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const executiveSession = cookieStore.get('executive-session')?.value;
     
     if (!executiveSession) {
@@ -164,7 +164,7 @@ export async function DELETE(
       }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const client = await pool.connect();
     

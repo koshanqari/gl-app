@@ -53,7 +53,11 @@ export default function MembersPage() {
 
   // Calculate KYC stats
   const kycStats = useMemo(() => {
-    const completed = members.filter(m => m.kyc_document_type && m.kyc_document_type.trim() !== "").length;
+    const completed = members.filter(m => 
+      m.kyc_document_type && m.kyc_document_type.trim() !== "" &&
+      m.kyc_document_number && m.kyc_document_number.trim() !== "" &&
+      m.kyc_document_url && m.kyc_document_url.trim() !== ""
+    ).length;
     const pending = members.length - completed;
     return { completed, pending, total: members.length };
   }, [members]);
@@ -62,11 +66,19 @@ export default function MembersPage() {
   const filteredMembers = useMemo(() => {
     let filtered = members;
     
-    // Apply KYC filter
+    // Apply KYC filter - ALL 3 fields required for completed
     if (kycFilter === "completed") {
-      filtered = filtered.filter(m => m.kyc_document_type && m.kyc_document_type.trim() !== "");
+      filtered = filtered.filter(m => 
+        m.kyc_document_type && m.kyc_document_type.trim() !== "" &&
+        m.kyc_document_number && m.kyc_document_number.trim() !== "" &&
+        m.kyc_document_url && m.kyc_document_url.trim() !== ""
+      );
     } else if (kycFilter === "pending") {
-      filtered = filtered.filter(m => !m.kyc_document_type || m.kyc_document_type.trim() === "");
+      filtered = filtered.filter(m => 
+        !m.kyc_document_type || m.kyc_document_type.trim() === "" ||
+        !m.kyc_document_number || m.kyc_document_number.trim() === "" ||
+        !m.kyc_document_url || m.kyc_document_url.trim() === ""
+      );
     }
     
     // Apply search filter
@@ -141,8 +153,8 @@ export default function MembersPage() {
   };
 
   const handleDownloadTemplate = () => {
-    // Create CSV template with country code separate
-    const csvContent = "Employee ID,Name,Email,Country Code,Phone\nEMP001,John Doe,john.doe@example.com,+91,1234567890\n";
+    // Create CSV template with country code separate and KYC fields (optional)
+    const csvContent = "Employee ID,Name,Email,Country Code,Phone,KYC Type (optional),KYC Number (optional)\nEMP001,John Doe,john.doe@example.com,+91,1234567890,aadhaar,1234-5678-9012\n";
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -161,23 +173,58 @@ export default function MembersPage() {
       return;
     }
 
-    const headers = ['Employee ID', 'Name', 'Email', 'Country Code', 'Phone', 'KYC Type', 'KYC Number'];
-    const rows = members.map(member => [
-      member.employee_id || '',
-      member.name || '',
-      member.email || '',
-      member.country_code || '+91',
-      member.phone || '',
-      member.kyc_document_type || '',
-      member.kyc_document_number || ''
-    ]);
+    console.log('Exporting members:', members.length);
+    console.log('Sample member:', members[0]);
+
+    // Create CSV content - wrap all fields in quotes for safety
+    const headers = [
+      'Employee ID',
+      'Name', 
+      'Email',
+      'Country Code',
+      'Phone',
+      'KYC Status',
+      'KYC Type',
+      'KYC Number',
+      'KYC Document Link'
+    ];
+
+    const rows = members.map(member => {
+      // Check if KYC is complete (all 3 fields filled)
+      const kycComplete = member.kyc_document_type && member.kyc_document_type.trim() !== '' &&
+                          member.kyc_document_number && member.kyc_document_number.trim() !== '' &&
+                          member.kyc_document_url && member.kyc_document_url.trim() !== '';
+      
+      // Create clickable link for KYC document
+      const kycDocumentLink = member.kyc_document_url 
+        ? `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}/view-document?key=${encodeURIComponent(member.kyc_document_url)}`
+        : '';
+      
+      const row = [
+        member.employee_id || '',
+        member.name || '',
+        member.email || '',
+        member.country_code || '+91',
+        member.phone || '',
+        kycComplete ? 'Complete' : 'Incomplete',
+        member.kyc_document_type || '',
+        member.kyc_document_number || '',
+        kycDocumentLink
+      ];
+
+      // Wrap each cell in quotes and escape any quotes inside
+      return row.map(cell => {
+        const escaped = String(cell).replace(/"/g, '""');
+        return `"${escaped}"`;
+      }).join(',');
+    });
 
     const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
+      headers.map(h => `"${h}"`).join(','),
+      ...rows
+    ].join('\r\n'); // Use Windows line endings for better Excel compatibility
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -207,7 +254,7 @@ export default function MembersPage() {
       
       // Validate headers
       const hasRequiredHeaders = expectedHeaders.every(h => 
-        headers.some(header => header.toLowerCase() === h.toLowerCase())
+        headers.some(header => header.toLowerCase().replace(' (optional)', '') === h.toLowerCase())
       );
 
       if (!hasRequiredHeaders) {
@@ -215,21 +262,63 @@ export default function MembersPage() {
         return;
       }
 
+      // Get header indices
+      const getHeaderIndex = (name: string) => {
+        return headers.findIndex(h => h.toLowerCase().replace(' (optional)', '') === name.toLowerCase());
+      };
+
+      const empIdIdx = getHeaderIndex('Employee ID');
+      const nameIdx = getHeaderIndex('Name');
+      const emailIdx = getHeaderIndex('Email');
+      const countryCodeIdx = getHeaderIndex('Country Code');
+      const phoneIdx = getHeaderIndex('Phone');
+      const kycTypeIdx = getHeaderIndex('KYC Type');
+      const kycNumberIdx = getHeaderIndex('KYC Number');
+
       // Parse rows
       const newMembers = [];
       const errors = [];
       const skipped = [];
 
+      // Helper function to parse CSV row with proper quote handling
+      const parseCSVRow = (line: string): string[] => {
+        const values: string[] = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let j = 0; j < line.length; j++) {
+          const char = line[j];
+          if (char === '"') {
+            if (inQuotes && line[j + 1] === '"') {
+              current += '"';
+              j++; // Skip next quote
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            values.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        values.push(current.trim()); // Add last value
+        return values.map(v => v.replace(/^"|"$/g, ''));
+      };
+
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-        if (values.length < 5 || !values[0]) continue; // Skip empty rows
+        const values = parseCSVRow(lines[i]);
+        if (values.length < 5 || !values[empIdIdx]) continue; // Skip empty rows
 
         const memberData = {
-          employee_id: values[0],
-          name: values[1],
-          email: values[2],
-          country_code: values[3] || '+91',
-          phone: values[4],
+          employee_id: values[empIdIdx],
+          name: values[nameIdx],
+          email: values[emailIdx],
+          country_code: values[countryCodeIdx] || '+91',
+          phone: values[phoneIdx],
+          kyc_document_type: kycTypeIdx >= 0 ? (values[kycTypeIdx] || null) : null,
+          kyc_document_number: kycNumberIdx >= 0 ? (values[kycNumberIdx] || null) : null,
+          kyc_document_url: null, // Document upload must be done via UI
         };
 
         // Check if employee_id or email already exists
@@ -483,7 +572,9 @@ export default function MembersPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {member.kyc_document_type && member.kyc_document_type.trim() !== "" ? (
+                        {member.kyc_document_type && member.kyc_document_type.trim() !== "" &&
+                         member.kyc_document_number && member.kyc_document_number.trim() !== "" &&
+                         member.kyc_document_url && member.kyc_document_url.trim() !== "" ? (
                           <Badge variant="default" className="bg-green-100 text-green-700 hover:bg-green-100">
                             <FileCheck className="h-3 w-3 mr-1" />
                             Completed
@@ -491,7 +582,7 @@ export default function MembersPage() {
                         ) : (
                           <Badge variant="secondary" className="bg-orange-100 text-orange-700 hover:bg-orange-100">
                             <X className="h-3 w-3 mr-1" />
-                            Pending
+                            Incomplete
                           </Badge>
                         )}
                       </td>

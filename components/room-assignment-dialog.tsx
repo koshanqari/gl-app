@@ -131,14 +131,24 @@ export function RoomAssignmentDialog({
               </div>
 
               {/* KYC Details */}
+              <div className="space-y-1 col-span-2">
+                <p className="text-sm font-medium text-slate-500">KYC Status</p>
+                {member.kyc_document_type && member.kyc_document_number && member.kyc_document_url ? (
+                  <Badge variant="default" className="bg-green-100 text-green-700 hover:bg-green-100">
+                    <FileText className="h-3 w-3 mr-1" />
+                    Complete - {getDocumentTypeName(member.kyc_document_type)}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="bg-orange-100 text-orange-700 hover:bg-orange-100">
+                    Incomplete
+                  </Badge>
+                )}
+              </div>
               {member.kyc_document_type && (
                 <>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-slate-500">KYC Document</p>
-                    <Badge variant="default" className="bg-blue-100 text-blue-700 hover:bg-blue-100">
-                      <FileText className="h-3 w-3 mr-1" />
-                      {getDocumentTypeName(member.kyc_document_type)}
-                    </Badge>
+                    <p className="text-sm font-medium text-slate-500">Document Type</p>
+                    <p className="text-slate-900">{getDocumentTypeName(member.kyc_document_type)}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-slate-500">Document Number</p>
@@ -147,15 +157,23 @@ export function RoomAssignmentDialog({
                   {member.kyc_document_url && (
                     <div className="space-y-1 col-span-2">
                       <p className="text-sm font-medium text-slate-500">View Document</p>
-                      <a
-                        href={member.kyc_document_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        onClick={async () => {
+                          try {
+                            const response = await fetch(`/api/file-url?key=${encodeURIComponent(member.kyc_document_url || "")}`);
+                            const data = await response.json();
+                            if (response.ok) {
+                              window.open(data.url, '_blank');
+                            }
+                          } catch (error) {
+                            console.error('Failed to open file:', error);
+                          }
+                        }}
                         className="inline-flex items-center text-primary hover:underline text-sm font-medium"
                       >
                         <FileText className="h-4 w-4 mr-1" />
                         Open KYC Document
-                      </a>
+                      </button>
                     </div>
                   )}
                 </>

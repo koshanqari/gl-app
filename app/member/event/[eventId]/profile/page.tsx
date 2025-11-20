@@ -5,6 +5,8 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FileUpload } from "@/components/ui/file-upload";
 import {
   MobileCard,
   MobileCardHeader,
@@ -23,7 +25,6 @@ import {
   Save,
   X
 } from "lucide-react";
-import { mockMembers } from "@/lib/mock-data";
 import { getMemberSession } from "@/lib/auth-cookies";
 
 export default function MemberProfilePage() {
@@ -31,42 +32,101 @@ export default function MemberProfilePage() {
   const eventId = params.eventId as string;
   const [memberData, setMemberData] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
     employee_id: "",
+    country_code: "+91",
     kyc_document_type: "",
     kyc_document_number: "",
+    kyc_document_url: "",
   });
+  const [isEditingKYC, setIsEditingKYC] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    // Get member session
-    const member = getMemberSession();
-    if (member) {
-      // Find member data for this event
-      const memberRecord = mockMembers.find(
-        m => m.email === member.email && m.event_id === eventId
-      );
-      
-      if (memberRecord) {
-        setMemberData(memberRecord);
-        setFormData({
-          name: memberRecord.name,
-          email: memberRecord.email,
-          phone: memberRecord.phone,
-          employee_id: memberRecord.employee_id,
-          kyc_document_type: memberRecord.kyc_document_type || "",
-          kyc_document_number: memberRecord.kyc_document_number || "",
-        });
+    // Get member session and fetch real data
+    const fetchMemberData = async () => {
+      const member = getMemberSession();
+      if (!member) {
+        setIsLoading(false);
+        return;
       }
-    }
+
+      try {
+        // Fetch members for this event
+        const response = await fetch(`/api/members?event_id=${eventId}`);
+        const data = await response.json();
+
+        if (response.ok && data.members) {
+          // Find the member by email
+          const memberRecord = data.members.find(
+            (m: any) => m.email === member.email
+          );
+
+          if (memberRecord) {
+            setMemberData(memberRecord);
+            setFormData({
+              name: memberRecord.name,
+              email: memberRecord.email,
+              phone: memberRecord.phone,
+              employee_id: memberRecord.employee_id,
+              country_code: memberRecord.country_code || "+91",
+              kyc_document_type: memberRecord.kyc_document_type || "",
+              kyc_document_number: memberRecord.kyc_document_number || "",
+              kyc_document_url: memberRecord.kyc_document_url || "",
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch member data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMemberData();
   }, [eventId]);
 
-  const handleSave = () => {
-    // Update member data
-    setMemberData({ ...memberData, ...formData });
-    setIsEditing(false);
+  const handleSave = async () => {
+    if (!memberData?.id) return;
+    
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/members/${memberData.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update memberData with the saved data from API
+        setMemberData({ ...memberData, ...data.member });
+        setFormData({
+          name: data.member.name,
+          email: data.member.email,
+          phone: data.member.phone,
+          employee_id: data.member.employee_id,
+          country_code: data.member.country_code || "+91",
+          kyc_document_type: data.member.kyc_document_type || "",
+          kyc_document_number: data.member.kyc_document_number || "",
+          kyc_document_url: data.member.kyc_document_url || "",
+        });
+        setIsEditing(false);
+      } else {
+        console.error('Failed to update profile:', data.message);
+        alert(`Failed to update profile: ${data.message}`);
+      }
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      alert('Failed to update profile. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -77,19 +137,34 @@ export default function MemberProfilePage() {
         email: memberData.email,
         phone: memberData.phone,
         employee_id: memberData.employee_id,
+        country_code: memberData.country_code || "+91",
         kyc_document_type: memberData.kyc_document_type || "",
         kyc_document_number: memberData.kyc_document_number || "",
+        kyc_document_url: memberData.kyc_document_url || "",
       });
     }
     setIsEditing(false);
+    setIsEditingKYC(false);
   };
+
+  if (isLoading) {
+    return (
+      <MobileContainer>
+        <MobileCard>
+          <MobileCardContent className="py-12 text-center">
+            <p className="text-slate-500">Loading profile...</p>
+          </MobileCardContent>
+        </MobileCard>
+      </MobileContainer>
+    );
+  }
 
   if (!memberData) {
     return (
       <MobileContainer>
         <MobileCard>
           <MobileCardContent className="py-12 text-center">
-            <p className="text-slate-500">Loading profile...</p>
+            <p className="text-slate-500">Member data not found</p>
           </MobileCardContent>
         </MobileCard>
       </MobileContainer>
@@ -125,10 +200,11 @@ export default function MemberProfilePage() {
                 <Button
                   size="sm"
                   onClick={handleSave}
+                  disabled={isSaving}
                   className="h-9 rounded-lg"
                 >
                   <Save className="h-4 w-4 mr-1.5" />
-                  Save
+                  {isSaving ? "Saving..." : "Save"}
                 </Button>
               </div>
             )
@@ -175,55 +251,195 @@ export default function MemberProfilePage() {
       <MobileCard>
         <MobileCardHeader
           action={
-            memberData.kyc_document_type ? (
-              <div className="px-3 py-1 rounded-full bg-green-50 border border-green-200">
-                <span className="text-xs font-semibold text-green-700">Verified</span>
+            !isEditingKYC ? (
+              <div className="flex gap-2 items-center">
+                {(memberData.kyc_document_type || formData.kyc_document_type) && 
+                 (memberData.kyc_document_number || formData.kyc_document_number) && 
+                 (memberData.kyc_document_url || formData.kyc_document_url) ? (
+                  <div className="px-3 py-1 rounded-full bg-green-50 border border-green-200">
+                    <span className="text-xs font-semibold text-green-700">Complete</span>
+                  </div>
+                ) : (
+                  <div className="px-3 py-1 rounded-full bg-orange-50 border border-orange-200">
+                    <span className="text-xs font-semibold text-orange-700">Incomplete</span>
+                  </div>
+                )}
+                {((memberData.kyc_document_type || formData.kyc_document_type) || 
+                  (memberData.kyc_document_number || formData.kyc_document_number) || 
+                  (memberData.kyc_document_url || formData.kyc_document_url)) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsEditingKYC(true)}
+                    className="h-9 rounded-lg"
+                  >
+                    <Edit className="h-4 w-4 mr-1.5" />
+                    Edit
+                  </Button>
+                )}
               </div>
-            ) : (
-              <div className="px-3 py-1 rounded-full bg-orange-50 border border-orange-200">
-                <span className="text-xs font-semibold text-orange-700">Pending</span>
+            ) : isEditingKYC ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIsEditingKYC(false);
+                    handleCancel();
+                  }}
+                  className="h-9 rounded-lg"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    await handleSave();
+                    setIsEditingKYC(false);
+                  }}
+                  disabled={isSaving}
+                  className="h-9 rounded-lg"
+                >
+                  <Save className="h-4 w-4 mr-1.5" />
+                  {isSaving ? "Saving..." : "Save"}
+                </Button>
               </div>
-            )
+            ) : null
           }
         >
           KYC Information
         </MobileCardHeader>
         <MobileCardContent>
-          {memberData.kyc_document_type ? (
+          {isEditingKYC || (
+            !memberData.kyc_document_type && 
+            !memberData.kyc_document_number && 
+            !memberData.kyc_document_url &&
+            !formData.kyc_document_type &&
+            !formData.kyc_document_number &&
+            !formData.kyc_document_url
+          ) ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="kyc_type" className="text-xs font-semibold text-slate-700">
+                  Document Type <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.kyc_document_type}
+                  onValueChange={(value) => setFormData({ ...formData, kyc_document_type: value })}
+                >
+                  <SelectTrigger className="h-12 rounded-xl border-slate-200">
+                    <SelectValue placeholder="Select document type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="aadhaar">Aadhaar Card</SelectItem>
+                    <SelectItem value="pan">PAN Card</SelectItem>
+                    <SelectItem value="passport">Passport</SelectItem>
+                    <SelectItem value="driving_license">Driving License</SelectItem>
+                    <SelectItem value="voter_id">Voter ID</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="kyc_number" className="text-xs font-semibold text-slate-700">
+                  Document Number <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="kyc_number"
+                  value={formData.kyc_document_number}
+                  onChange={(e) => setFormData({ ...formData, kyc_document_number: e.target.value })}
+                  placeholder="Enter document number"
+                  className="h-12 rounded-xl border-slate-200"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-slate-700">
+                  Upload Document/Image <span className="text-red-500">*</span>
+                </Label>
+                <FileUpload
+                  value={formData.kyc_document_url}
+                  onChange={(url) => setFormData({ ...formData, kyc_document_url: url })}
+                  folder="kyc"
+                  accept="image/*,application/pdf,.pdf"
+                  maxSize={10 * 1024 * 1024}
+                />
+                <p className="text-xs text-slate-500">Upload PDF, JPG, PNG (max 10MB)</p>
+                
+                {formData.kyc_document_url && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full h-12 rounded-xl font-semibold"
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/api/file-url?key=${encodeURIComponent(formData.kyc_document_url)}`);
+                        const data = await response.json();
+                        if (response.ok) {
+                          window.open(data.url, '_blank');
+                        }
+                      } catch (error) {
+                        console.error('Failed to open file:', error);
+                      }
+                    }}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View Uploaded Document
+                  </Button>
+                )}
+              </div>
+
+              {!memberData.kyc_document_type && (
+                <Button
+                  className="w-full h-12 rounded-xl font-semibold mt-4"
+                  onClick={async () => {
+                    if (formData.kyc_document_type && formData.kyc_document_number && formData.kyc_document_url) {
+                      await handleSave();
+                      setIsEditingKYC(false);
+                    }
+                  }}
+                  disabled={!formData.kyc_document_type || !formData.kyc_document_number || !formData.kyc_document_url || isSaving}
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {isSaving ? "Saving..." : "Save KYC Information"}
+                </Button>
+              )}
+            </div>
+          ) : (
             <div className="space-y-5">
               <MobileInfoRow 
                 icon={FileText} 
                 label="Document Type" 
-                value={<span className="text-base font-semibold text-slate-900 capitalize">{memberData.kyc_document_type}</span>}
+                value={<span className="text-base font-semibold text-slate-900 capitalize">{(memberData.kyc_document_type || formData.kyc_document_type)?.replace(/_/g, ' ')}</span>}
               />
               <MobileInfoRow 
                 icon={FileText} 
                 label="Document Number" 
-                value={memberData.kyc_document_number}
+                value={memberData.kyc_document_number || formData.kyc_document_number}
               />
               
-              {memberData.kyc_document_url && (
+              {(memberData.kyc_document_url || formData.kyc_document_url) && (
                 <Button
                   variant="outline"
                   className="w-full h-12 rounded-xl font-semibold mt-2"
-                  onClick={() => window.open(memberData.kyc_document_url, "_blank")}
+                  onClick={async () => {
+                    try {
+                      const key = memberData.kyc_document_url || formData.kyc_document_url;
+                      const response = await fetch(`/api/file-url?key=${encodeURIComponent(key)}`);
+                      const data = await response.json();
+                      if (response.ok) {
+                        window.open(data.url, '_blank');
+                      }
+                    } catch (error) {
+                      console.error('Failed to open file:', error);
+                    }
+                  }}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
                   View Document
                 </Button>
               )}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                <FileText className="h-8 w-8 text-slate-400" />
-              </div>
-              <p className="text-sm font-medium text-slate-900 mb-2">
-                No KYC document yet
-              </p>
-              <p className="text-sm text-slate-500 max-w-xs mx-auto">
-                Please contact the event organizer to upload your KYC documents
-              </p>
             </div>
           )}
         </MobileCardContent>

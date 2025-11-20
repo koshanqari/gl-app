@@ -102,8 +102,19 @@ export function MemberDetailsDialog({ isOpen, onClose, member, onEdit }: MemberD
 
           {/* KYC Information */}
           <div className="pt-4 border-t">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">KYC Information</h3>
-            {member.kyc_document_type ? (
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-900">KYC Information</h3>
+              {member.kyc_document_type && member.kyc_document_number && member.kyc_document_url ? (
+                <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200">
+                  Complete
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200">
+                  Incomplete
+                </Badge>
+              )}
+            </div>
+            {member.kyc_document_type || member.kyc_document_number || member.kyc_document_url ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
@@ -113,7 +124,7 @@ export function MemberDetailsDialog({ isOpen, onClose, member, onEdit }: MemberD
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">
-                        {getDocumentTypeName(member.kyc_document_type)}
+                        {getDocumentTypeName(member.kyc_document_type || "")}
                       </Badge>
                     </div>
                   </div>
@@ -135,15 +146,23 @@ export function MemberDetailsDialog({ isOpen, onClose, member, onEdit }: MemberD
                       <FileText className="h-3 w-3" />
                       <span>Document</span>
                     </div>
-                    <a
-                      href={member.kyc_document_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`/api/file-url?key=${encodeURIComponent(member.kyc_document_url || "")}`);
+                          const data = await response.json();
+                          if (response.ok) {
+                            window.open(data.url, '_blank');
+                          }
+                        } catch (error) {
+                          console.error('Failed to open file:', error);
+                        }
+                      }}
                       className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
                     >
                       View Document
                       <ExternalLink className="h-3 w-3" />
-                    </a>
+                    </button>
                   </div>
                 )}
               </div>

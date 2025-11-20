@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { setCollaboratorSession, getAndClearRedirectUrl } from "@/lib/auth-cookies";
 import Image from "next/image";
 
-export default function CollaboratorLogin() {
+function CollaboratorLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
@@ -36,58 +36,35 @@ export default function CollaboratorLogin() {
       return;
     }
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      // Authenticate collaborator via API
+      const response = await fetch('/api/collaborator/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, event_id: eventId }),
+      });
 
-    // Mock collaborator data - in production, this would be an API call
-    // This would check against backend database with event-specific access
-    const mockCollaborators = [
-      {
-        id: "collab-1",
-        email: "manager@grandplaza.com",
-        password: "hotel123",
-        eventId: "event-1",
-        permissions: {
-          overview: false,
-          members: false,
-          stay: true,
-          crew: false,
-          itinerary: false,
-          travel: false,
-          meals: false,
-          event_profile: false,
-        },
-      },
-      {
-        id: "collab-2",
-        email: "hr@example.com",
-        password: "hrpass",
-        eventId: "event-1",
-        permissions: {
-          overview: true,
-          members: true,
-          stay: false,
-          crew: false,
-          itinerary: false,
-          travel: false,
-          meals: false,
-          event_profile: false,
-        },
-      },
-    ];
+      const data = await response.json();
 
-    // Find collaborator and validate they have access to this specific event
-    const collaborator = mockCollaborators.find(
-      (c) => c.email === email && c.password === password && c.eventId === eventId
-    );
+      if (!response.ok) {
+        setError(data.message || "Invalid email, password, or you don't have access to this event");
+        setLoading(false);
+        return;
+      }
 
-    if (collaborator) {
-      // Store collaborator info in cookie (using the eventId from URL)
+      const collaborator = data.collaborator;
+
+      // Parse permissions if it's a string
+      const permissions = typeof collaborator.permissions === 'string'
+        ? JSON.parse(collaborator.permissions)
+        : collaborator.permissions;
+
+      // Store collaborator info in cookie
       setCollaboratorSession({
         id: collaborator.id,
         email: email,
-        eventId: eventId, // Use event ID from URL
-        permissions: collaborator.permissions,
+        eventId: eventId,
+        permissions: permissions,
       });
 
       // Check for redirect URL first
@@ -97,28 +74,29 @@ export default function CollaboratorLogin() {
         router.push(redirectUrl);
       } else {
         // Redirect to first available page based on permissions
-        const firstAvailableRoute = collaborator.permissions.stay
+        const firstAvailableRoute = permissions.stay
           ? "stay"
-          : collaborator.permissions.members
+          : permissions.members
           ? "members"
-          : collaborator.permissions.overview
+          : permissions.overview
           ? "overview"
-          : collaborator.permissions.event_profile
+          : permissions.event_profile
           ? "profile"
-          : collaborator.permissions.crew
+          : permissions.crew
           ? "crew"
-          : collaborator.permissions.itinerary
+          : permissions.itinerary
           ? "itinerary"
-          : collaborator.permissions.travel
+          : permissions.travel
           ? "travel"
-          : collaborator.permissions.meals
+          : permissions.meals
           ? "meals"
           : "overview";
 
         router.push(`/executive/event_portal/${eventId}/${firstAvailableRoute}`);
       }
-    } else {
-      setError("Invalid email, password, or you don't have access to this event");
+    } catch (error) {
+      console.error('Login error:', error);
+      setError("Failed to authenticate. Please try again.");
       setLoading(false);
     }
   };
@@ -279,6 +257,14 @@ export default function CollaboratorLogin() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function CollaboratorLogin() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <CollaboratorLoginContent />
+    </Suspense>
   );
 }
 

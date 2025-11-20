@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ArrowLeft, LayoutDashboard, Users, Home, FileText, LogOut, Building2, Calendar, Plane, UtensilsCrossed, UserCog, UserPlus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExecutiveFooter } from "@/components/executive-footer";
-import { mockMembers, mockHotels, mockRoomAssignments } from "@/lib/mock-data";
 import { useEffect, useState, useRef } from "react";
 import { EventDataProvider } from "@/lib/event-context";
 import { LoadingScreen } from "@/components/loading-screen";
@@ -45,36 +44,42 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
     if (hasCheckedAuth.current) return;
     hasCheckedAuth.current = true;
     
-    // Check for collaborator session first
-    const collabSession = getCollaboratorSession();
-    if (collabSession) {
-      setUserRole("collaborator");
-      setUser({ id: collabSession.id, name: "Collaborator", email: collabSession.email });
-      setPermissions(collabSession.permissions);
+    // For /executive/* routes, prioritize executive session
+    // Check for executive session first
+    const executiveSession = getExecutiveSession();
+    if (executiveSession) {
+      setUserRole("executive");
+      setUser(executiveSession);
+      // Executives have all permissions
+      setPermissions({
+        overview: true,
+        members: true,
+        stay: true,
+        crew: true,
+        itinerary: true,
+        travel: true,
+        meals: true,
+        event_profile: true,
+      });
     } else {
-      // Check for executive session
-      const executiveSession = getExecutiveSession();
-      if (!executiveSession) {
+      // Only check for collaborator session if no executive session exists
+      // AND the collaborator session matches the current event
+      const collabSession = getCollaboratorSession();
+      if (collabSession && collabSession.eventId === eventId) {
+        setUserRole("collaborator");
+        setUser({ id: collabSession.id, name: "Collaborator", email: collabSession.email });
+        setPermissions(collabSession.permissions);
+      } else {
+        // If collaborator session exists but for different event, clear it
+        if (collabSession && collabSession.eventId !== eventId) {
+          clearCollaboratorSession();
+        }
         // Store current URL for redirect after login
         setRedirectUrl(pathname);
         router.push("/executive/login");
-      } else {
-        setUserRole("executive");
-        setUser(executiveSession);
-        // Executives have all permissions
-        setPermissions({
-          overview: true,
-          members: true,
-          stay: true,
-          crew: true,
-          itinerary: true,
-          travel: true,
-          meals: true,
-          event_profile: true,
-        });
       }
     }
-  }, [router, pathname]);
+  }, [router, pathname, eventId]);
 
   // Track last visited page (only for executives)
   useEffect(() => {
@@ -182,10 +187,11 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
     }, 500);
   };
 
-  // Get event with partner details and preload all data
-  const members = mockMembers.filter(m => m.event_id === eventId);
-  const hotels = mockHotels.filter(h => h.event_id === eventId);
-  const roomAssignments = mockRoomAssignments.filter(ra => ra.event_id === eventId);
+  // EventDataProvider context (currently not used, but kept for potential future use)
+  // All data is now fetched via API calls in individual pages
+  const members: any[] = [];
+  const hotels: any[] = [];
+  const roomAssignments: any[] = [];
 
   // Only show loading screen on initial load
   if (isInitialLoading) {
@@ -193,7 +199,7 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   // If auth is complete but data isn't ready yet, return null to avoid flash
-  if (!event || !partner || !user || !permissions) {
+  if (!event || !partner || !user || !permissions || !userRole) {
     return null;
   }
 
@@ -212,7 +218,7 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
     hotels,
     roomAssignments,
     user,
-    userRole,
+    userRole: userRole as "executive" | "collaborator",
     permissions,
   };
 

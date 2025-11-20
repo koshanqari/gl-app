@@ -20,16 +20,31 @@ export default function MemberLogin() {
     setError("");
     setLoading(true);
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      // Authenticate member via API
+      const response = await fetch('/api/member/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, employee_id: employeeId }),
+      });
 
-    // Mock authentication - in production, this would be an API call
-    if (email && employeeId) {
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || "Invalid email or employee ID");
+        setLoading(false);
+        return;
+      }
+
+      const member = data.member;
+
       // Store member session in cookie
       const memberSession = {
-        email,
-        employee_id: employeeId,
-        name: "Member User", // Would come from API
+        email: member.email,
+        employee_id: member.employee_id,
+        name: member.name,
+        id: member.id,
+        event_id: member.event_id,
       };
       
       setMemberSession(memberSession);
@@ -37,8 +52,9 @@ export default function MemberLogin() {
       // Check for redirect URL or default to events page
       const redirectUrl = getAndClearRedirectUrl() || "/member/events";
       router.push(redirectUrl);
-    } else {
-      setError("Please fill in all fields");
+    } catch (error) {
+      console.error('Login error:', error);
+      setError("Failed to authenticate. Please try again.");
       setLoading(false);
     }
   };
