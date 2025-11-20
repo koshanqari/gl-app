@@ -309,14 +309,6 @@ export function PhoneInput({
           className="flex-1"
         />
       </div>
-      {phoneNumber && (
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-slate-500">
-            Full Number: <span className="font-mono text-slate-700">{countryCode}{phoneNumber}</span>
-          </span>
-          <span className="text-slate-400">Searchable format</span>
-        </div>
-      )}
     </div>
   );
 }

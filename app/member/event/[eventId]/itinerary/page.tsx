@@ -38,10 +38,10 @@ export default function MemberItineraryPage() {
 
 
   if (activities.length === 0) {
-    return (
+  return (
       <MobileContainer>
-        <MobileEmptyState
-          icon={Calendar}
+    <MobileEmptyState
+      icon={Calendar}
           title="No Activities Scheduled"
           description="Event itinerary will appear here once activities are added"
         />

@@ -359,6 +359,20 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
               </Link>
             )}
             
+            {permissions.itinerary && (
+              <Link
+                href={`/executive/event_portal/${eventId}/itinerary`}
+                className={`w-full flex items-center justify-start px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  pathname === `/executive/event_portal/${eventId}/itinerary`
+                    ? "bg-primary text-primary-foreground"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Itinerary
+              </Link>
+            )}
+            
             {permissions.crew && (
               <Link
                 href={`/executive/event_portal/${eventId}/crew`}
@@ -371,23 +385,6 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
                 <div className="flex items-center">
                   <UserCog className="mr-2 h-4 w-4" />
                   Crew
-                </div>
-                <span className="text-xs text-slate-500">Soon</span>
-              </Link>
-            )}
-            
-            {permissions.itinerary && (
-              <Link
-                href={`/executive/event_portal/${eventId}/itinerary`}
-                className={`w-full flex items-center justify-between px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  pathname === `/executive/event_portal/${eventId}/itinerary`
-                    ? "bg-primary text-primary-foreground"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                <div className="flex items-center">
-                  <FileText className="mr-2 h-4 w-4" />
-                  Itinerary
                 </div>
                 <span className="text-xs text-slate-500">Soon</span>
               </Link>
