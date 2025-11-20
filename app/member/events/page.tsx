@@ -18,6 +18,8 @@ export default function MemberEventsPage() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const hasCheckedAuth = useRef(false);
   const hasPreloaded = useRef(false);
+  const hasAutoRedirected = useRef(false);
+  const shouldShowEventsList = useRef(false);
 
   useEffect(() => {
     // Only check auth once
@@ -73,6 +75,23 @@ export default function MemberEventsPage() {
           
           const events = (await Promise.all(eventPromises)).filter(Boolean);
           setMemberEvents(events);
+          
+          // Check if we should show events list (e.g., from back button or URL parameter)
+          const urlParams = new URLSearchParams(window.location.search);
+          const showList = urlParams.get('show') === 'list' || shouldShowEventsList.current;
+          
+          if (showList) {
+            // User explicitly wants to see events list - don't auto-redirect
+            shouldShowEventsList.current = false;
+            hasAutoRedirected.current = false;
+          } else if (events.length === 1 && !hasAutoRedirected.current) {
+            // Initial load with single event - auto-redirect
+            hasAutoRedirected.current = true;
+            // Small delay to ensure state is set
+            await new Promise(resolve => setTimeout(resolve, 100));
+            router.push(`/member/event/${events[0].id}/profile`);
+            return; // Don't continue with loading screen
+          }
         }
 
         // Step 2: Prefetch routes (60%)

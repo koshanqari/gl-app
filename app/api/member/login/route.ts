@@ -16,15 +16,15 @@ export async function POST(request: Request) {
     const client = await pool.connect();
     
     try {
-      // Authenticate member using email and employee_id
+      // Authenticate member using email and employee_id (case-insensitive)
       const result = await client.query(`
         SELECT 
           id, event_id, employee_id, name, email, country_code, phone,
           kyc_document_type, kyc_document_number, kyc_document_url,
           is_active, created_at, updated_at
         FROM app.members
-        WHERE email = $1 
-          AND employee_id = $2
+        WHERE LOWER(email) = LOWER($1) 
+          AND LOWER(employee_id) = LOWER($2)
           AND is_active = true
         ORDER BY created_at DESC
         LIMIT 1;

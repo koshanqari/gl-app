@@ -116,7 +116,9 @@ export default function MemberProfilePage() {
           kyc_document_number: data.member.kyc_document_number || "",
           kyc_document_url: data.member.kyc_document_url || "",
         });
-    setIsEditing(false);
+        setIsEditing(false);
+        // Dispatch event to notify layout that KYC may have been updated
+        window.dispatchEvent(new Event('kyc-updated'));
       } else {
         console.error('Failed to update profile:', data.message);
         alert(`Failed to update profile: ${data.message}`);
@@ -171,8 +173,32 @@ export default function MemberProfilePage() {
     );
   }
 
+  // Check if KYC is complete
+  const isKYCComplete = !!(
+    formData.kyc_document_type &&
+    formData.kyc_document_number &&
+    formData.kyc_document_url
+  );
+
   return (
     <MobileContainer>
+      {/* KYC Warning Banner */}
+      {!isKYCComplete && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4 mx-4 mt-4 rounded-r-lg">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-red-800">
+                Please complete KYC to continue
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Personal Information */}
       <MobileCard>
         <MobileCardHeader
@@ -313,10 +339,7 @@ export default function MemberProfilePage() {
           {isEditingKYC || (
             !memberData.kyc_document_type && 
             !memberData.kyc_document_number && 
-            !memberData.kyc_document_url &&
-            !formData.kyc_document_type &&
-            !formData.kyc_document_number &&
-            !formData.kyc_document_url
+            !memberData.kyc_document_url
           ) ? (
             <div className="space-y-4">
               <div className="space-y-2">

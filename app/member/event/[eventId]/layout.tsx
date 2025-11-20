@@ -18,9 +18,11 @@ export default function MemberEventLayout({
   const pathname = usePathname();
   const eventId = params.eventId as string;
   const [member, setMember] = useState<any>(null);
+  const [memberData, setMemberData] = useState<any>(null);
   const [event, setEvent] = useState<any>(null);
   const [partner, setPartner] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isKYCComplete, setIsKYCComplete] = useState(false);
 
   useEffect(() => {
     // Check if member is logged in
@@ -33,11 +35,14 @@ export default function MemberEventLayout({
     }
   }, [router, pathname]);
 
-  // Fetch event and partner data
+  // Fetch event, partner, and member data
   useEffect(() => {
     const fetchEventData = async () => {
       try {
         setLoading(true);
+        const session = getMemberSession();
+        if (!session) return;
+
         // Fetch event data
         const eventResponse = await fetch(`/api/events/${eventId}`);
         const eventData = await eventResponse.json();
@@ -54,6 +59,27 @@ export default function MemberEventLayout({
               setPartner(partnerData.partner);
             }
           }
+
+          // Fetch member data to check KYC status
+          const membersResponse = await fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(session.email)}`);
+          const membersData = await membersResponse.json();
+
+          if (membersResponse.ok && membersData.members) {
+            const memberRecord = membersData.members.find(
+              (m: any) => m.email === session.email && m.event_id === eventId
+            );
+
+            if (memberRecord) {
+              setMemberData(memberRecord);
+              // Check if KYC is complete (all 3 fields must be filled)
+              const kycComplete = !!(
+                memberRecord.kyc_document_type &&
+                memberRecord.kyc_document_number &&
+                memberRecord.kyc_document_url
+              );
+              setIsKYCComplete(kycComplete);
+            }
+          }
         }
       } catch (error) {
         console.error('Failed to fetch event data:', error);
@@ -65,6 +91,38 @@ export default function MemberEventLayout({
     if (eventId) {
       fetchEventData();
     }
+  }, [eventId]);
+
+  // Listen for KYC update events from profile page
+  useEffect(() => {
+    const handleKYCUpdate = () => {
+      const session = getMemberSession();
+      if (!session || !eventId) return;
+
+      // Refetch member data to check KYC status
+      fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(session.email)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.members) {
+            const memberRecord = data.members.find(
+              (m: any) => m.email === session.email && m.event_id === eventId
+            );
+            if (memberRecord) {
+              setMemberData(memberRecord);
+              const kycComplete = !!(
+                memberRecord.kyc_document_type &&
+                memberRecord.kyc_document_number &&
+                memberRecord.kyc_document_url
+              );
+              setIsKYCComplete(kycComplete);
+            }
+          }
+        })
+        .catch(err => console.error('Failed to refresh KYC status:', err));
+    };
+
+    window.addEventListener('kyc-updated', handleKYCUpdate);
+    return () => window.removeEventListener('kyc-updated', handleKYCUpdate);
   }, [eventId]);
 
   // Track last visited page
@@ -128,7 +186,7 @@ export default function MemberEventLayout({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => router.push("/member/events")}
+                onClick={() => router.push("/member/events?show=list")}
                 className="rounded-full flex-shrink-0"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -168,7 +226,6 @@ export default function MemberEventLayout({
           <div className="flex items-stretch h-16">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
-              const isDisabled = item.soon;
               
               return (
                 <Link
@@ -177,14 +234,11 @@ export default function MemberEventLayout({
                   className={`flex-1 flex flex-col items-center justify-center gap-1 relative transition-colors ${
                     isActive
                       ? "text-slate-900"
-                      : isDisabled
-                      ? "text-slate-300 pointer-events-none"
                       : "text-slate-500 active:bg-slate-50"
                   }`}
                   onClick={(e) => {
-                    if (isDisabled) {
-                      e.preventDefault();
-                    }
+                    // Allow navigation even if coming soon or KYC incomplete
+                    // The page itself will handle showing appropriate messages
                   }}
                 >
                   <item.icon 

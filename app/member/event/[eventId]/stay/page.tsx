@@ -12,6 +12,7 @@ import {
   MobileContainer,
   MobileEmptyState,
 } from "@/components/mobile";
+import { KYCRequiredMessage } from "@/components/mobile/kyc-required-message";
 import { 
   Home, 
   MapPin, 
@@ -31,6 +32,8 @@ export default function MemberStayPage() {
   const [hotel, setHotel] = useState<any>(null);
   const [hotelImageUrl, setHotelImageUrl] = useState<string>("");
   const [roommates, setRoommates] = useState<any[]>([]);
+  const [isKYCComplete, setIsKYCComplete] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,6 +53,19 @@ export default function MemberStayPage() {
 
           if (memberRecord) {
             setMemberData(memberRecord);
+            // Check if KYC is complete
+            const kycComplete = !!(
+              memberRecord.kyc_document_type &&
+              memberRecord.kyc_document_number &&
+              memberRecord.kyc_document_url
+            );
+            setIsKYCComplete(kycComplete);
+
+            // Only fetch other data if KYC is complete
+            if (!kycComplete) {
+              setIsLoading(false);
+              return;
+            }
 
             // Fetch hotel for this event
             const hotelResponse = await fetch(`/api/hotels?event_id=${eventId}`);
@@ -126,13 +142,54 @@ export default function MemberStayPage() {
         }
       } catch (error) {
         console.error('Failed to fetch stay data:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchData();
   }, [eventId]);
 
-  if (!memberData) {
+  // Listen for KYC update events
+  useEffect(() => {
+    const handleKYCUpdate = async () => {
+      const member = getMemberSession();
+      if (!member) return;
+
+      try {
+        const membersResponse = await fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(member.email)}`);
+        const membersData = await membersResponse.json();
+
+        if (membersResponse.ok && membersData.members) {
+          const memberRecord = membersData.members.find(
+            (m: any) => m.email === member.email && m.event_id === eventId
+          );
+
+          if (memberRecord) {
+            const kycComplete = !!(
+              memberRecord.kyc_document_type &&
+              memberRecord.kyc_document_number &&
+              memberRecord.kyc_document_url
+            );
+            setIsKYCComplete(kycComplete);
+            
+            // If KYC is now complete, fetch the data
+            if (kycComplete) {
+              // Reload the page data
+              window.location.reload();
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to refresh KYC status:', error);
+      }
+    };
+
+    window.addEventListener('kyc-updated', handleKYCUpdate);
+    return () => window.removeEventListener('kyc-updated', handleKYCUpdate);
+  }, [eventId]);
+
+  if (isLoading) {
     return (
       <MobileContainer>
         <MobileCard>
@@ -140,6 +197,14 @@ export default function MemberStayPage() {
             <p className="text-slate-500">Loading stay information...</p>
           </MobileCardContent>
         </MobileCard>
+      </MobileContainer>
+    );
+  }
+
+  if (!memberData || !isKYCComplete) {
+    return (
+      <MobileContainer>
+        <KYCRequiredMessage eventId={eventId} />
       </MobileContainer>
     );
   }
