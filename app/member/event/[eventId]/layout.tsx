@@ -30,6 +30,7 @@ export default function MemberEventLayout({
   const [hotelImageUrl, setHotelImageUrl] = useState<string>("");
   const [roomAssignment, setRoomAssignment] = useState<any>(null);
   const [roommates, setRoommates] = useState<any[]>([]);
+  const [itineraryActivities, setItineraryActivities] = useState<any[]>([]);
 
   useEffect(() => {
     // Check if member is logged in
@@ -63,22 +64,23 @@ export default function MemberEventLayout({
 
         setEvent(eventData.event);
 
-        // Step 2: Fetch partner data (30%)
-        setLoadingProgress(30);
-        if (eventData.event.partner_id) {
-          const partnerResponse = await fetch(`/api/partners/${eventData.event.partner_id}`);
-          const partnerData = await partnerResponse.json();
+        // Step 2: Fetch partner and member data in parallel (40%)
+        setLoadingProgress(40);
+        const [partnerResponse, membersResponse] = await Promise.all([
+          eventData.event.partner_id 
+            ? fetch(`/api/partners/${eventData.event.partner_id}`)
+            : Promise.resolve(null),
+          fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(session.email)}`)
+        ]);
 
+        if (partnerResponse) {
+          const partnerData = await partnerResponse.json();
           if (partnerResponse.ok) {
             setPartner(partnerData.partner);
           }
         }
 
-        // Step 3: Fetch member data and check KYC (40%)
-        setLoadingProgress(40);
-        const membersResponse = await fetch(`/api/members?event_id=${eventId}&email=${encodeURIComponent(session.email)}`);
         const membersData = await membersResponse.json();
-
         if (!membersResponse.ok || !membersData.members) {
           setLoading(false);
           return;
@@ -103,11 +105,26 @@ export default function MemberEventLayout({
         );
         setIsKYCComplete(kycComplete);
 
-        // Step 4: Fetch hotel data (60%)
-        setLoadingProgress(60);
-        const hotelResponse = await fetch(`/api/hotels?event_id=${eventId}`);
-        const hotelData = await hotelResponse.json();
+        // Step 3: Fetch hotel, room assignments, and itinerary in parallel (70%)
+        setLoadingProgress(70);
+        const fetchPromises: Promise<Response>[] = [
+          fetch(`/api/hotels?event_id=${eventId}`)
+        ];
 
+        if (kycComplete) {
+          fetchPromises.push(
+            fetch(`/api/room-assignments?event_id=${eventId}`),
+            fetch(`/api/itinerary?event_id=${eventId}`)
+          );
+        }
+
+        const responses = await Promise.all(fetchPromises);
+        const hotelResponse = responses[0];
+        const assignmentsResponse = kycComplete ? responses[1] : null;
+        const itineraryResponse = kycComplete ? responses[2] : null;
+
+        // Process hotel data
+        const hotelData = await hotelResponse.json();
         if (hotelResponse.ok && hotelData.hotel) {
           setHotel(hotelData.hotel);
           
@@ -133,10 +150,8 @@ export default function MemberEventLayout({
           }
         }
 
-        // Step 5: Fetch room assignments (80%)
-        setLoadingProgress(80);
-        if (kycComplete) {
-          const assignmentsResponse = await fetch(`/api/room-assignments?event_id=${eventId}`);
+        // Process room assignments
+        if (kycComplete && assignmentsResponse) {
           const assignmentsData = await assignmentsResponse.json();
 
           if (assignmentsResponse.ok && assignmentsData.assignments) {
@@ -170,7 +185,15 @@ export default function MemberEventLayout({
           }
         }
 
-        // Step 6: Complete (100%)
+        // Process itinerary activities
+        if (kycComplete && itineraryResponse) {
+          const itineraryData = await itineraryResponse.json();
+          if (itineraryResponse.ok && itineraryData.activities) {
+            setItineraryActivities(itineraryData.activities);
+          }
+        }
+
+        // Step 7: Complete (100%)
         setLoadingProgress(100);
         await new Promise(resolve => setTimeout(resolve, 300));
         setLoading(false);
@@ -273,6 +296,7 @@ export default function MemberEventLayout({
         roomAssignment: roomAssignment || null,
         roommates: roommates || [],
         isKYCComplete: isKYCComplete || false,
+        itineraryActivities: itineraryActivities || [],
       }}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex justify-center">

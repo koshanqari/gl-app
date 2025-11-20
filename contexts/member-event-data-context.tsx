@@ -9,6 +9,7 @@ interface MemberEventData {
   roomAssignment: any;
   roommates: any[];
   isKYCComplete: boolean;
+  itineraryActivities: any[];
 }
 
 const MemberEventDataContext = createContext<MemberEventData | null>(null);

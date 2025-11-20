@@ -1,7 +1,6 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, useEffect } from "react";
 import { MobileEmptyState, MobileContainer, MobileCard, MobileCardHeader, MobileCardContent } from "@/components/mobile";
 import { KYCRequiredMessage } from "@/components/mobile/kyc-required-message";
 import { useMemberEventData } from "@/contexts/member-event-data-context";
@@ -26,33 +25,8 @@ interface ItineraryActivity {
 export default function MemberItineraryPage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const { isKYCComplete } = useMemberEventData();
-  const [activities, setActivities] = useState<ItineraryActivity[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!isKYCComplete) {
-      setIsLoading(false);
-      return;
-    }
-
-    const fetchActivities = async () => {
-      try {
-        const response = await fetch(`/api/itinerary?event_id=${eventId}`);
-        const data = await response.json();
-
-        if (response.ok && data.activities) {
-          setActivities(data.activities);
-        }
-      } catch (error) {
-        console.error('Failed to fetch itinerary activities:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchActivities();
-  }, [eventId, isKYCComplete]);
+  const { isKYCComplete, itineraryActivities } = useMemberEventData();
+  const activities = itineraryActivities || [];
 
   if (!isKYCComplete) {
     return (
@@ -62,17 +36,6 @@ export default function MemberItineraryPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <MobileContainer>
-        <MobileCard>
-          <MobileCardContent className="py-12 text-center">
-            <p className="text-slate-500">Loading itinerary...</p>
-          </MobileCardContent>
-        </MobileCard>
-      </MobileContainer>
-    );
-  }
 
   if (activities.length === 0) {
     return (
