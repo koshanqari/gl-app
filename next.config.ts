@@ -20,6 +20,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Increase body size limit for file uploads (helps with AWS Lambda/API Gateway)
+  // Note: For large files (>2MB), presigned URLs are used which bypass this limit
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
+  },
 };
 
 export default nextConfig;

@@ -360,9 +360,9 @@ export default function MemberProfilePage() {
                   onChange={(url) => setFormData({ ...formData, kyc_document_url: url })}
                   folder="kyc"
                   accept="image/*,application/pdf,.pdf"
-                  maxSize={10 * 1024 * 1024}
+                  maxSize={5 * 1024 * 1024}
                 />
-                <p className="text-xs text-slate-500">Upload PDF, JPG, PNG (max 10MB)</p>
+                <p className="text-xs text-slate-500">Upload from gallery/files only (max 5MB)</p>
                 
                 {formData.kyc_document_url && (
                   <Button

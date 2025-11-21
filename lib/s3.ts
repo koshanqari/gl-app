@@ -125,8 +125,8 @@ export function generateFileKey(folder: string, filename: string, contentType?: 
   // If no extension found, try to infer from content type (important for camera uploads)
   if (!extension && contentType) {
     if (contentType.startsWith('image/')) {
-      const mimeExtension = contentType.split('/')[1];
-      if (mimeExtension && ['jpeg', 'jpg', 'png', 'gif', 'webp'].includes(mimeExtension)) {
+      const mimeExtension = contentType.split('/')[1].split('-')[0]; // Handle 'image/heic-sequence'
+      if (mimeExtension && ['jpeg', 'jpg', 'png', 'gif', 'webp', 'heic', 'heif'].includes(mimeExtension)) {
         extension = mimeExtension === 'jpeg' ? 'jpg' : mimeExtension;
       }
     } else if (contentType === 'application/pdf') {
@@ -139,32 +139,9 @@ export function generateFileKey(folder: string, filename: string, contentType?: 
     extension = 'jpg'; // Default to jpg for camera photos
   }
   
-  // Sanitize filename - remove extension first, then sanitize
-  const nameWithoutExt = lastDotIndex > 0 && lastDotIndex < filenameOnly.length - 1
-    ? filenameOnly.substring(0, lastDotIndex)
-    : filenameOnly;
-  
-  let sanitizedFilename = nameWithoutExt
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '-')
-    .replace(/-+/g, '-') // Replace multiple dashes with single dash
-    .replace(/^-|-$/g, '') // Remove leading/trailing dashes
-    .substring(0, 50); // Limit length to avoid issues
-  
-  // Ensure we have a valid filename (fallback if sanitization removes everything)
-  if (!sanitizedFilename || sanitizedFilename.length === 0) {
-    sanitizedFilename = 'photo';
-  }
-
-  // Construct the key - use simpler format for camera uploads to avoid pattern issues
-  const key = `${sanitizedFolder}/${timestamp}-${randomString}-${sanitizedFilename}.${extension}`;
-  
-  // Final validation: ensure key doesn't contain invalid characters and matches safe pattern
-  const safeKeyPattern = /^[a-z0-9/._-]+$/i;
-  if (!safeKeyPattern.test(key)) {
-    // If key is invalid, generate a completely safe minimal one
-    return `${sanitizedFolder}/${timestamp}-${randomString}.${extension}`;
-  }
+  // Simple key: folder/timestamp-random.extension
+  // No filename = no possible issues
+  const key = `${sanitizedFolder}/${timestamp}-${randomString}.${extension}`;
   
   return key;
 }

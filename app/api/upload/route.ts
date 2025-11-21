@@ -7,7 +7,7 @@ import { checkAuth } from '@/lib/auth-helpers';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// Max file size: 5MB
+// Max file size: 5MB (safe for AWS Lambda)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 // Allowed file types
@@ -18,6 +18,10 @@ const ALLOWED_IMAGE_TYPES = [
   'image/gif',
   'image/webp',
   'image/svg+xml',
+  'image/heic',
+  'image/heif',
+  'image/heic-sequence',
+  'image/heif-sequence',
 ];
 
 const ALLOWED_DOCUMENT_TYPES = [
@@ -28,6 +32,8 @@ const ALLOWED_DOCUMENT_TYPES = [
 
 export async function POST(request: Request) {
   try {
+    console.log('Upload started');
+    
     // Check authentication (executive, collaborator, or member)
     const auth = await checkAuth();
     const cookieStore = await cookies();
@@ -39,9 +45,11 @@ export async function POST(request: Request) {
           status: 'error',
           message: 'Unauthorized - No session found',
         },
-        { status: 401 }
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
+    
+    console.log('Auth passed');
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -59,32 +67,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate file type based on fileType parameter
-    const allowedTypes = fileType === 'document' 
-      ? ALLOWED_DOCUMENT_TYPES 
-      : ALLOWED_IMAGE_TYPES;
+    // Validate file type - allow all images or specific documents
+    const isImage = file.type.startsWith('image/');
+    const isDocument = ALLOWED_DOCUMENT_TYPES.includes(file.type);
     
-    const allAllowedTypes = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_DOCUMENT_TYPES];
-    
-    if (!allAllowedTypes.includes(file.type)) {
+    if (!isImage && !isDocument) {
       return NextResponse.json(
         {
           status: 'error',
-          message: fileType === 'document' 
-            ? 'Invalid file type. Only PDF, DOC, DOCX are allowed'
-            : 'Invalid file type. Only images are allowed (JPEG, PNG, GIF, WebP, SVG)',
+          message: 'Invalid file type. Only images and PDF documents are allowed',
         },
         { status: 400 }
       );
     }
     
-    if (!allowedTypes.includes(file.type)) {
+    // If fileType is specified as 'document', only allow documents
+    if (fileType === 'document' && !isDocument) {
       return NextResponse.json(
         {
           status: 'error',
-          message: fileType === 'document' 
-            ? 'Invalid file type. Only PDF, DOC, DOCX are allowed'
-            : 'Invalid file type. Only images are allowed (JPEG, PNG, GIF, WebP, SVG)',
+          message: 'Invalid file type. Only PDF, DOC, DOCX are allowed',
         },
         { status: 400 }
       );
@@ -105,15 +107,19 @@ export async function POST(request: Request) {
     const allowedFolders = ['partners', 'events', 'members', 'executives', 'kyc', 'hotels'];
     const targetFolder = folder && allowedFolders.includes(folder) ? folder : 'misc';
 
+    console.log('File details:', { name: file.name, type: file.type, size: file.size });
+
     // Convert file to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
     // Generate unique key - pass content type to help with camera uploads
-    const key = generateFileKey(targetFolder, file.name || 'camera-photo', file.type);
+    const key = generateFileKey(targetFolder, file.name || 'photo', file.type);
+    console.log('Generated S3 key:', key);
 
     // Upload to S3 (returns the S3 key)
     const s3Key = await uploadFileToS3(buffer, key, file.type);
+    console.log('S3 upload successful:', s3Key);
 
     // Delete old file if provided
     if (oldUrl) {
