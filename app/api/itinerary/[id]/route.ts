@@ -12,10 +12,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     try {
       const activityResult = await client.query(
         `SELECT 
-          id, event_id, name, from_datetime, to_datetime, venue, description,
-          sequence_order, is_active, created_at, updated_at
-        FROM app.itinerary_activities 
-        WHERE id = $1 AND is_active = TRUE`,
+          a.id, a.event_id, a.name, a.from_datetime, a.to_datetime, a.venue, a.description,
+          a.sequence_order, a.group_id, a.is_active, a.created_at, a.updated_at,
+          g.group_name, g.group_order
+        FROM app.itinerary_activities a
+        LEFT JOIN app.itinerary_groups g ON a.group_id = g.id
+        WHERE a.id = $1 AND a.is_active = TRUE`,
         [id]
       );
 
@@ -101,6 +103,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       venue,
       description,
       sequence_order,
+      group_id,
       links = [],
     } = body;
 
@@ -126,9 +129,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           venue = $4,
           description = $5,
           sequence_order = COALESCE($6, sequence_order),
+          group_id = $7,
           updated_at = NOW()
-        WHERE id = $7 AND is_active = TRUE
-        RETURNING id, event_id, name, from_datetime, to_datetime, venue, description, sequence_order, is_active, created_at, updated_at`,
+        WHERE id = $8 AND is_active = TRUE
+        RETURNING id, event_id, name, from_datetime, to_datetime, venue, description, sequence_order, group_id, is_active, created_at, updated_at`,
         [
           name,
           from_datetime,
@@ -136,6 +140,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           venue || null,
           description || null,
           sequence_order,
+          group_id || null,
           id,
         ]
       );

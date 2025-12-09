@@ -1059,14 +1059,14 @@ export default function StayManagementPage() {
                 <div className="space-y-2">
                   <Label>Hotel Image</Label>
                   <FileUpload
-                        value={hotelData.image_url}
+                    value={hotelData.image_url}
                     onChange={(url) => setHotelData({ ...hotelData, image_url: url })}
                     folder="hotels"
-                          accept="image/*"
+                    accept="image/*"
                     maxSize={5 * 1024 * 1024}
                     fileType="image"
+                    compact
                   />
-                  <p className="text-xs text-slate-500">Upload JPG, PNG (max 5MB)</p>
                 </div>
 
                 {/* Website */}

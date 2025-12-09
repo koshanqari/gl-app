@@ -23,6 +23,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const key = searchParams.get('key');
+    const redirect = searchParams.get('redirect') === 'true';
 
     if (!key) {
       return NextResponse.json(
@@ -51,6 +52,11 @@ export async function GET(request: Request) {
 
     // Generate signed URL (valid for 1 hour)
     const signedUrl = await getPresignedDownloadUrl(trimmedKey, 3600);
+
+    // If redirect=true, redirect to the signed URL (useful for img tags)
+    if (redirect) {
+      return NextResponse.redirect(signedUrl);
+    }
 
     return NextResponse.json(
       {

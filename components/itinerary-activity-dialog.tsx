@@ -6,6 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -26,6 +33,7 @@ interface ItineraryActivity {
   venue: string | null;
   description: string | null;
   sequence_order?: number;
+  group_id?: string;
   links: ItineraryLink[];
 }
 
@@ -52,9 +60,25 @@ export function ItineraryActivityDialog({
     venue: "",
     description: "",
     sequence_order: 0,
+    group_id: "",
   });
   const [links, setLinks] = useState<ItineraryLink[]>([{ link_text: "", link_url: "" }]);
   const [useSpecificTime, setUseSpecificTime] = useState(false);
+  const [groups, setGroups] = useState<Array<{ id: string; group_name: string }>>([]);
+
+  // Fetch groups when dialog opens
+  useEffect(() => {
+    if (isOpen && eventId) {
+      fetch(`/api/itinerary-groups?event_id=${eventId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.groups) {
+            setGroups(data.groups);
+          }
+        })
+        .catch(err => console.error('Failed to fetch groups:', err));
+    }
+  }, [isOpen, eventId]);
 
   useEffect(() => {
     if (activity) {
@@ -77,6 +101,7 @@ export function ItineraryActivityDialog({
         venue: activity.venue || "",
         description: activity.description || "",
         sequence_order: activity.sequence_order || 0,
+        group_id: activity.group_id || "",
       });
       setUseSpecificTime(hasSpecificTime);
       setLinks(activity.links && activity.links.length > 0 
@@ -93,6 +118,7 @@ export function ItineraryActivityDialog({
         venue: "",
         description: "",
         sequence_order: 0,
+        group_id: "",
       });
       setUseSpecificTime(false);
       setLinks([{ link_text: "", link_url: "" }]);
@@ -151,6 +177,7 @@ export function ItineraryActivityDialog({
       to_datetime: toDateTime,
       venue: formData.venue || null,
       description: formData.description || null,
+      group_id: formData.group_id || null,
       sequence_order: formData.sequence_order || undefined,
       links: validLinks,
     };
@@ -239,10 +266,36 @@ export function ItineraryActivityDialog({
             </div>
           )}
 
+          {/* Group Selection */}
+          {groups.length > 0 && (
+            <div>
+              <Label htmlFor="group_id">Itinerary Group (Optional)</Label>
+              <Select
+                value={formData.group_id || "none"}
+                onValueChange={(value) => setFormData({ ...formData, group_id: value === "none" ? "" : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a group (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Group</SelectItem>
+                  {groups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.group_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500 mt-1">
+                Select which group this activity belongs to (e.g., Day 1, Day 2)
+              </p>
+            </div>
+          )}
+
           {/* Sequence Order */}
           <div>
             <Label htmlFor="sequence_order">
-              Order in Day (leave 0 for auto)
+              Order in Group (leave 0 for auto)
             </Label>
             <Input
               id="sequence_order"
@@ -250,10 +303,10 @@ export function ItineraryActivityDialog({
               min="0"
               value={formData.sequence_order}
               onChange={(e) => setFormData({ ...formData, sequence_order: parseInt(e.target.value) || 0 })}
-              placeholder="Order within the day (1, 2, 3...)"
+              placeholder="Order within the group (1, 2, 3...)"
             />
             <p className="text-xs text-slate-500 mt-1">
-              Activities are sorted by this number within each day. Leave as 0 to auto-assign.
+              Activities are sorted by this number within each group. Leave as 0 to auto-assign.
             </p>
           </div>
 

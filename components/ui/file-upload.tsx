@@ -14,6 +14,7 @@ interface FileUploadProps {
   maxSize?: number;
   disabled?: boolean;
   fileType?: "image" | "document";
+  compact?: boolean; // Smaller preview for thumbnails
 }
 
 export function FileUpload({
@@ -25,6 +26,7 @@ export function FileUpload({
   maxSize = 5 * 1024 * 1024, // 5MB default
   disabled = false,
   fileType,
+  compact = false,
 }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | undefined>(undefined);
@@ -216,7 +218,7 @@ export function FileUpload({
         />
 
         {/* Max size info */}
-        <p className="text-xs text-slate-500 text-center mb-2">
+        <p className={cn("text-xs text-slate-500 text-center mb-2", compact && "max-w-[400px]")}>
           Max file size: {Math.round(maxSize / (1024 * 1024))}MB
         </p>
 
@@ -224,35 +226,35 @@ export function FileUpload({
           <div className="relative">
             {preview && preview.startsWith('blob:') ? (
               // Show image preview for blob URLs (newly uploaded)
-              <div className="aspect-video w-full">
+              <div className={compact ? "max-w-[400px]" : "aspect-video w-full"}>
                 <img
                   src={preview}
                   alt="Preview"
-                  className="w-full h-full object-contain rounded-lg"
+                  className="w-full h-auto object-contain rounded-lg"
                 />
               </div>
             ) : signedUrl && value && (value.includes('.jpg') || value.includes('.jpeg') || value.includes('.png') || value.includes('.gif') || value.includes('.webp') || value.includes('image')) ? (
               // Show image preview using signed URL
-              <div className="aspect-video w-full">
+              <div className={compact ? "max-w-[400px]" : "aspect-video w-full"}>
                 <img
                   src={signedUrl}
                   alt="Preview"
-                  className="w-full h-full object-contain rounded-lg"
+                  className="w-full h-auto object-contain rounded-lg"
                 />
               </div>
             ) : value ? (
-              <div className="aspect-video w-full">
+              <div className={compact ? "max-w-[400px]" : "aspect-video w-full"}>
                 <img
                   src={preview}
                   alt="Preview"
-                  className="w-full h-full object-contain rounded-lg"
+                  className="w-full h-auto object-contain rounded-lg"
                 />
               </div>
             ) : (
-              <div className="flex items-center gap-3 p-4 bg-slate-100 rounded-lg">
-                <FileText className="h-8 w-8 text-slate-600 flex-shrink-0" />
+              <div className={cn("flex items-center gap-3 bg-slate-100 rounded-lg", compact ? "p-3 max-w-[400px]" : "p-4")}>
+                <FileText className={cn("text-slate-600 flex-shrink-0", compact ? "h-6 w-6" : "h-8 w-8")} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">
+                  <p className={cn("font-medium text-slate-900 truncate", compact ? "text-sm" : "text-sm")}>
                     Document uploaded
                   </p>
                   <p className="text-xs text-slate-500">Click to view or replace</p>
@@ -311,18 +313,21 @@ export function FileUpload({
         ) : (
           <div
             onClick={handleClick}
-            className="flex flex-col items-center justify-center py-12 px-6 text-center"
+            className={cn(
+              "flex flex-col items-center justify-center text-center",
+              compact ? "py-8 px-6 max-w-[400px]" : "py-12 px-6"
+            )}
           >
             {uploading ? (
-              <Loader2 className="h-10 w-10 text-slate-400 animate-spin mb-3" />
+              <Loader2 className={cn("text-slate-400 animate-spin", compact ? "h-8 w-8 mb-2" : "h-10 w-10 mb-3")} />
             ) : accept.includes('pdf') && accept.includes('image') ? (
-              <FileText className="h-10 w-10 text-slate-400 mb-3" />
+              <FileText className={cn("text-slate-400", compact ? "h-8 w-8 mb-2" : "h-10 w-10 mb-3")} />
             ) : accept.includes('pdf') ? (
-              <FileText className="h-10 w-10 text-slate-400 mb-3" />
+              <FileText className={cn("text-slate-400", compact ? "h-8 w-8 mb-2" : "h-10 w-10 mb-3")} />
             ) : (
-              <ImageIcon className="h-10 w-10 text-slate-400 mb-3" />
+              <ImageIcon className={cn("text-slate-400", compact ? "h-8 w-8 mb-2" : "h-10 w-10 mb-3")} />
             )}
-            <p className="text-sm font-medium text-slate-900 mb-1">
+            <p className={cn("font-medium text-slate-900", compact ? "text-sm mb-1" : "text-sm mb-1")}>
               {uploading ? "Uploading..." : "Click to upload"}
             </p>
             <p className="text-xs text-slate-500">

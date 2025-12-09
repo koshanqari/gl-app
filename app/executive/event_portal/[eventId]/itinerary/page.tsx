@@ -2,11 +2,12 @@
 
 import { useParams } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
-import { Calendar, Plus, Edit, Trash2, Clock, MapPin, ExternalLink } from "lucide-react";
+import { Calendar, Plus, Edit, Trash2, Clock, MapPin, ExternalLink, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ItineraryActivityDialog } from "@/components/itinerary-activity-dialog";
+import { ItineraryGroupDialog } from "@/components/itinerary-group-dialog";
 import { useEventData } from "@/lib/event-context";
 
 interface ItineraryLink {
@@ -23,13 +24,24 @@ interface ItineraryActivity {
   venue: string | null;
   description: string | null;
   sequence_order: number;
+  group_id?: string;
+  group_name?: string;
+  group_order?: number;
   links: ItineraryLink[];
 }
 
-interface DayGroup {
-  dayNumber: number;
-  date: string;
-  dateLabel: string;
+interface ItineraryGroup {
+  id: string;
+  event_id: string;
+  group_name: string;
+  group_order: number;
+  start_date?: string;
+  end_date?: string;
+  description?: string;
+}
+
+interface GroupedActivities {
+  group: ItineraryGroup;
   activities: ItineraryActivity[];
 }
 
@@ -38,11 +50,14 @@ export default function ItineraryPage() {
   const eventId = params.eventId as string;
   const { permissions, event } = useEventData();
   const [activities, setActivities] = useState<ItineraryActivity[]>([]);
+  const [groups, setGroups] = useState<ItineraryGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<ItineraryActivity | null>(null);
+  const [editingGroup, setEditingGroup] = useState<ItineraryGroup | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedDayFilter, setSelectedDayFilter] = useState<number | 'all'>('all');
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState<string | 'all'>('all');
 
   // Check if user has itinerary permission
   const hasPermission = permissions?.itinerary ?? false;
@@ -50,14 +65,22 @@ export default function ItineraryPage() {
   const fetchActivities = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/itinerary?event_id=${eventId}`);
-      const data = await response.json();
+      const [activitiesResponse, groupsResponse] = await Promise.all([
+        fetch(`/api/itinerary?event_id=${eventId}`),
+        fetch(`/api/itinerary-groups?event_id=${eventId}`),
+      ]);
 
-      if (response.ok && data.activities) {
-        setActivities(data.activities);
+      const activitiesData = await activitiesResponse.json();
+      const groupsData = await groupsResponse.json();
+
+      if (activitiesResponse.ok && activitiesData.activities) {
+        setActivities(activitiesData.activities);
+      }
+      if (groupsResponse.ok && groupsData.groups) {
+        setGroups(groupsData.groups);
       }
     } catch (error) {
-      console.error('Failed to fetch itinerary activities:', error);
+      console.error('Failed to fetch itinerary data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -132,79 +155,139 @@ export default function ItineraryPage() {
     }
   };
 
-  // Group activities by day
-  const dayGroups = useMemo(() => {
-    const groups: DayGroup[] = [];
-    const eventStartDate = event?.start_date ? new Date(event.start_date) : null;
+  // Group activities by itinerary group
+  const groupedActivities = useMemo(() => {
+    const grouped: GroupedActivities[] = [];
     
-    // Group activities by date
-    const activityByDate: Record<string, ItineraryActivity[]> = {};
+    // Create a map of activities by group_id
+    const activitiesByGroup: Record<string, ItineraryActivity[]> = {};
+    const ungroupedActivities: ItineraryActivity[] = [];
+
     activities.forEach(activity => {
-      const dateKey = new Date(activity.from_datetime).toISOString().split('T')[0];
-      if (!activityByDate[dateKey]) {
-        activityByDate[dateKey] = [];
+      if (activity.group_id) {
+        if (!activitiesByGroup[activity.group_id]) {
+          activitiesByGroup[activity.group_id] = [];
+        }
+        activitiesByGroup[activity.group_id].push(activity);
+      } else {
+        ungroupedActivities.push(activity);
       }
-      activityByDate[dateKey].push(activity);
     });
 
-    // Sort dates and create day groups
-    const sortedDates = Object.keys(activityByDate).sort();
-    sortedDates.forEach((dateKey) => {
-      const date = new Date(dateKey);
-      let dayNumber = 1;
-      
-      if (eventStartDate) {
-        // Calculate day number relative to event start
-        const startDateOnly = new Date(eventStartDate.toISOString().split('T')[0]);
-        const activityDateOnly = new Date(dateKey);
-        const diffTime = activityDateOnly.getTime() - startDateOnly.getTime();
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        dayNumber = diffDays + 1;
-      }
+    // Sort groups by group_order
+    const sortedGroups = [...groups].sort((a, b) => a.group_order - b.group_order);
 
-      groups.push({
-        dayNumber,
-        date: dateKey,
-        dateLabel: date.toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-          year: 'numeric',
-        }),
-        activities: activityByDate[dateKey].sort((a, b) => a.sequence_order - b.sequence_order),
+    // Add all groups (even if they have no activities)
+    sortedGroups.forEach(group => {
+      const groupActivities = activitiesByGroup[group.id] || [];
+      grouped.push({
+        group,
+        activities: groupActivities.sort((a, b) => a.sequence_order - b.sequence_order),
       });
     });
 
-    return groups;
-  }, [activities, event?.start_date]);
+    // Add ungrouped activities if any (show even if groups exist)
+    if (ungroupedActivities.length > 0) {
+      grouped.push({
+        group: {
+          id: 'ungrouped',
+          event_id: eventId,
+          group_name: 'Ungrouped',
+          group_order: 999,
+        },
+        activities: ungroupedActivities.sort((a, b) => a.sequence_order - b.sequence_order),
+      });
+    }
 
-  // Filter activities based on search and day filter
-  const filteredDayGroups = useMemo(() => {
-    let filtered = dayGroups;
+    return grouped;
+  }, [activities, groups, eventId]);
 
-    // Filter by day
-    if (selectedDayFilter !== 'all') {
-      filtered = filtered.filter(group => group.dayNumber === selectedDayFilter);
+  // Filter activities based on search and group filter
+  const filteredGroups = useMemo(() => {
+    let filtered = groupedActivities;
+
+    // Filter by group
+    if (selectedGroupFilter !== 'all') {
+      filtered = filtered.filter(item => item.group.id === selectedGroupFilter);
     }
 
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.map(group => ({
-        ...group,
-        activities: group.activities.filter(
+      filtered = filtered.map(item => ({
+        ...item,
+        activities: item.activities.filter(
           (activity) =>
             activity.name.toLowerCase().includes(query) ||
             (activity.venue && activity.venue.toLowerCase().includes(query)) ||
             (activity.description && activity.description.toLowerCase().includes(query))
         ),
-      })).filter(group => group.activities.length > 0);
+      })).filter(item => item.activities.length > 0);
     }
 
     return filtered;
-  }, [dayGroups, searchQuery, selectedDayFilter]);
+  }, [groupedActivities, searchQuery, selectedGroupFilter]);
 
-  const totalActivities = filteredDayGroups.reduce((sum, group) => sum + group.activities.length, 0);
+  const totalActivities = filteredGroups.reduce((sum, item) => sum + item.activities.length, 0);
+
+  const handleAddGroup = () => {
+    setEditingGroup(null);
+    setIsGroupDialogOpen(true);
+  };
+
+  const handleEditGroup = (group: ItineraryGroup) => {
+    setEditingGroup(group);
+    setIsGroupDialogOpen(true);
+  };
+
+  const handleDeleteGroup = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this group? Activities in this group will become ungrouped.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/itinerary-groups/${id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        fetchActivities();
+      } else {
+        alert(data.message || "Failed to delete group");
+      }
+    } catch (error) {
+      console.error('Failed to delete group:', error);
+      alert("Failed to delete group");
+    }
+  };
+
+  const handleSaveGroup = async (groupData: any) => {
+    try {
+      const url = editingGroup
+        ? `/api/itinerary-groups/${editingGroup.id}`
+        : '/api/itinerary-groups';
+      const method = editingGroup ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(groupData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        fetchActivities();
+      } else {
+        alert(data.message || `Failed to ${editingGroup ? 'update' : 'create'} group`);
+      }
+    } catch (error) {
+      console.error('Failed to save group:', error);
+      alert(`Failed to ${editingGroup ? 'update' : 'create'} group`);
+    }
+  };
 
   const formatDateTime = (dateTimeString: string) => {
     const date = new Date(dateTimeString);
@@ -259,10 +342,16 @@ export default function ItineraryPage() {
             Plan and manage event schedules and activities
           </p>
         </div>
-        <Button onClick={handleAddActivity}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Activity
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleAddGroup}>
+            <Layers className="h-4 w-4 mr-2" />
+            Manage Groups
+          </Button>
+          <Button onClick={handleAddActivity}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Activity
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filter */}
@@ -275,16 +364,16 @@ export default function ItineraryPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="max-w-md"
             />
-            {dayGroups.length > 0 && (
+            {groups.length > 0 && (
               <select
-                value={selectedDayFilter}
-                onChange={(e) => setSelectedDayFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+                value={selectedGroupFilter}
+                onChange={(e) => setSelectedGroupFilter(e.target.value)}
                 className="px-3 py-2 border border-slate-200 rounded-md text-sm"
               >
-                <option value="all">All Days</option>
-                {dayGroups.map(group => (
-                  <option key={group.dayNumber} value={group.dayNumber}>
-                    Day {group.dayNumber}
+                <option value="all">All Groups</option>
+                {groups.map(group => (
+                  <option key={group.id} value={group.id}>
+                    {group.group_name}
                   </option>
                 ))}
               </select>
@@ -305,7 +394,7 @@ export default function ItineraryPage() {
             <div className="text-center py-12">
               <p className="text-slate-500">Loading activities...</p>
             </div>
-          ) : filteredDayGroups.length === 0 ? (
+          ) : filteredGroups.length === 0 ? (
             <div className="text-center py-12">
               <Calendar className="h-16 w-16 mx-auto text-slate-300 mb-4" />
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
@@ -323,21 +412,47 @@ export default function ItineraryPage() {
             </div>
           ) : (
             <div className="space-y-8">
-              {filteredDayGroups.map((dayGroup) => (
-                <div key={dayGroup.date} className="space-y-4">
-                  {/* Day Header */}
-                  <div className="flex items-center gap-3 pb-2 border-b-2 border-slate-200">
-                    <div className="bg-slate-900 text-white px-4 py-2 rounded-lg">
-                      <span className="text-lg font-bold">Day {dayGroup.dayNumber}</span>
+              {filteredGroups.map((item) => (
+                <div key={item.group.id} className="space-y-4">
+                  {/* Group Header */}
+                  <div className="flex items-center justify-between pb-2 border-b-2 border-slate-200">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-slate-900 text-white px-4 py-2 rounded-lg">
+                        <span className="text-lg font-bold">{item.group.group_name}</span>
+                      </div>
+                      {item.group.description && (
+                        <p className="text-slate-600 text-sm">{item.group.description}</p>
+                      )}
+                      <span className="text-xs text-slate-500">
+                        {item.activities.length} {item.activities.length === 1 ? 'activity' : 'activities'}
+                      </span>
                     </div>
-                    <div>
-                      <p className="text-slate-600 font-medium">{dayGroup.dateLabel}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditGroup(item.group)}
+                        title="Edit Group"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      {item.group.id !== 'ungrouped' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteGroup(item.group.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Delete Group"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
 
-                  {/* Activities for this day */}
+                  {/* Activities for this group */}
                   <div className="space-y-3 pl-4 border-l-2 border-slate-100">
-                    {dayGroup.activities.map((activity, index) => {
+                    {item.activities.map((activity, index) => {
                       const fromDateTime = formatDateTime(activity.from_datetime);
                       const toDateTime = activity.to_datetime ? formatDateTime(activity.to_datetime) : null;
 
@@ -429,7 +544,7 @@ export default function ItineraryPage() {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
+      {/* Add/Edit Activity Dialog */}
       <ItineraryActivityDialog
         isOpen={isDialogOpen}
         onClose={() => {
@@ -439,6 +554,18 @@ export default function ItineraryPage() {
         activity={editingActivity}
         eventId={eventId}
         onSave={handleSaveActivity}
+      />
+
+      {/* Add/Edit Group Dialog */}
+      <ItineraryGroupDialog
+        isOpen={isGroupDialogOpen}
+        onClose={() => {
+          setIsGroupDialogOpen(false);
+          setEditingGroup(null);
+        }}
+        group={editingGroup}
+        eventId={eventId}
+        onSave={handleSaveGroup}
       />
     </div>
   );

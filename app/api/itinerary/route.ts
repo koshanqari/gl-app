@@ -19,14 +19,16 @@ export async function GET(request: Request) {
     const client = await pool.connect();
     
     try {
-      // Fetch activities with sequence_order for day-based grouping
+      // Fetch activities with group information
       const activitiesResult = await client.query(
         `SELECT 
-          id, event_id, name, from_datetime, to_datetime, venue, description,
-          sequence_order, is_active, created_at, updated_at
-        FROM app.itinerary_activities
-        WHERE event_id = $1 AND is_active = TRUE
-        ORDER BY DATE(from_datetime) ASC, sequence_order ASC, from_datetime ASC`,
+          a.id, a.event_id, a.name, a.from_datetime, a.to_datetime, a.venue, a.description,
+          a.sequence_order, a.group_id, a.is_active, a.created_at, a.updated_at,
+          g.group_name, g.group_order
+        FROM app.itinerary_activities a
+        LEFT JOIN app.itinerary_groups g ON a.group_id = g.id
+        WHERE a.event_id = $1 AND a.is_active = TRUE
+        ORDER BY COALESCE(g.group_order, 999), a.sequence_order ASC, a.from_datetime ASC`,
         [eventId]
       );
 
@@ -89,6 +91,7 @@ export async function POST(request: Request) {
       venue,
       description,
       sequence_order,
+      group_id,
       links = [],
     } = body;
 
@@ -130,9 +133,9 @@ export async function POST(request: Request) {
       // Insert activity
       const activityResult = await client.query(
         `INSERT INTO app.itinerary_activities 
-          (event_id, name, from_datetime, to_datetime, venue, description, sequence_order, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING id, event_id, name, from_datetime, to_datetime, venue, description, sequence_order, is_active, created_at, updated_at`,
+          (event_id, name, from_datetime, to_datetime, venue, description, sequence_order, group_id, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id, event_id, name, from_datetime, to_datetime, venue, description, sequence_order, group_id, is_active, created_at, updated_at`,
         [
           event_id,
           name,
@@ -141,6 +144,7 @@ export async function POST(request: Request) {
           venue || null,
           description || null,
           finalSequenceOrder,
+          group_id || null,
           userId,
         ]
       );

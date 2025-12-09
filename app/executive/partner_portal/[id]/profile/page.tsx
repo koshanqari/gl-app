@@ -1,8 +1,8 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, useEffect } from "react";
-import { Plus, X, Save } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, X, Save, Upload, Loader2, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,10 +45,49 @@ export default function PartnerProfilePage() {
     { name: "", country_code: "+91", phone: "", email: "", designation: "", is_primary: true }
   ]);
 
+  // Logo upload state
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoSignedUrl, setLogoSignedUrl] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     fetchPartner();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partnerId]);
+
+  // Fetch signed URL for logo when logo_url changes
+  useEffect(() => {
+    const fetchLogoUrl = async () => {
+      if (!formData.logo_url) {
+        setLogoSignedUrl(null);
+        return;
+      }
+      
+      // If it's already a URL, use it directly
+      if (formData.logo_url.startsWith('http://') || formData.logo_url.startsWith('https://')) {
+        setLogoSignedUrl(formData.logo_url);
+        return;
+      }
+      
+      // It's an S3 key, fetch signed URL
+      try {
+        const response = await fetch(`/api/file-url?key=${encodeURIComponent(formData.logo_url)}`);
+        const data = await response.json();
+        if (response.ok && data.url) {
+          setLogoSignedUrl(data.url);
+        } else {
+          setLogoSignedUrl(null);
+        }
+      } catch (error) {
+        console.error('Failed to fetch logo URL:', error);
+        setLogoSignedUrl(null);
+      }
+    };
+    
+    fetchLogoUrl();
+  }, [formData.logo_url]);
 
   const fetchPartner = async () => {
     try {
@@ -123,6 +162,76 @@ export default function PartnerProfilePage() {
       is_primary: i === index
     }));
     setPocs(newPocs);
+  };
+
+  // Handle logo upload
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Max 2MB for logo
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setLogoError("Logo must be less than 2MB");
+      return;
+    }
+
+    // Only allow images
+    if (!file.type.startsWith('image/')) {
+      setLogoError("Please upload an image file (PNG, JPG, etc.)");
+      return;
+    }
+
+    setLogoError(null);
+    setUploadingLogo(true);
+
+    try {
+      // Create preview
+      const previewUrl = URL.createObjectURL(file);
+      setLogoPreview(previewUrl);
+
+      // Upload to S3
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+      formDataUpload.append('folder', 'partners');
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formDataUpload,
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.key) {
+        setFormData(prev => ({ ...prev, logo_url: data.key }));
+      } else {
+        setLogoError(data.message || 'Failed to upload logo');
+        setLogoPreview(null);
+      }
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      setLogoError('Failed to upload logo. Please try again.');
+      setLogoPreview(null);
+    } finally {
+      setUploadingLogo(false);
+      // Reset input
+      if (logoInputRef.current) {
+        logoInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Get logo display URL
+  const getLogoDisplayUrl = () => {
+    if (logoPreview) return logoPreview;
+    if (logoSignedUrl) return logoSignedUrl;
+    return null;
+  };
+
+  const handleRemoveLogo = () => {
+    setFormData(prev => ({ ...prev, logo_url: '' }));
+    setLogoPreview(null);
+    setLogoError(null);
   };
 
   const handleSave = async () => {
@@ -245,15 +354,101 @@ export default function PartnerProfilePage() {
               />
             </div>
 
-            <div>
-              <Label htmlFor="logo_url">Company Logo URL</Label>
-              <Input
-                id="logo_url"
-                type="url"
-                value={formData.logo_url}
-                onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                placeholder="https://example.com/logo.png"
-              />
+            <div className="col-span-2">
+              <Label>Company Logo</Label>
+              <div className="mt-2">
+                {/* Logo Preview */}
+                {(logoPreview || logoSignedUrl || formData.logo_url) ? (
+                  <div className="flex items-start gap-4">
+                    <div className="relative w-32 h-32 border-2 border-slate-200 rounded-lg overflow-hidden bg-slate-50 flex items-center justify-center">
+                      {getLogoDisplayUrl() ? (
+                        <img
+                          src={getLogoDisplayUrl()!}
+                          alt="Company logo"
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <Building2 className="h-8 w-8 text-slate-300" />
+                      )}
+                      {uploadingLogo && (
+                        <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                          <Loader2 className="h-6 w-6 animate-spin text-slate-600" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={uploadingLogo}
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        Change Logo
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveLogo}
+                        disabled={uploadingLogo}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => !uploadingLogo && logoInputRef.current?.click()}
+                    className="w-full h-32 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-colors"
+                  >
+                    {uploadingLogo ? (
+                      <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    ) : (
+                      <>
+                        <Building2 className="h-8 w-8 text-slate-400 mb-2" />
+                        <span className="text-sm text-slate-500">Click to upload company logo</span>
+                        <span className="text-xs text-slate-400 mt-1">PNG, JPG up to 2MB</span>
+                      </>
+                    )}
+                  </div>
+                )}
+                
+                {/* Hidden file input */}
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  className="hidden"
+                />
+                
+                {/* Error message */}
+                {logoError && (
+                  <p className="text-sm text-red-600 mt-2">{logoError}</p>
+                )}
+                
+                {/* Optional: Allow manual URL entry */}
+                <div className="mt-3">
+                  <p className="text-xs text-slate-500 mb-1">Or enter logo URL directly:</p>
+                  <Input
+                    type="url"
+                    value={formData.logo_url.startsWith('partners/') ? '' : formData.logo_url}
+                    onChange={(e) => {
+                      setFormData({ ...formData, logo_url: e.target.value });
+                      setLogoPreview(null);
+                    }}
+                    placeholder="https://example.com/logo.png"
+                    className="text-sm"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="col-span-2">

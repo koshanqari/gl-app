@@ -262,16 +262,14 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
                 </Button>
               )}
               <div className="flex items-center gap-3">
-                {/* Partner Logo */}
-                {partner?.logo_url && (
+                {/* Partner Logo - Primary, or Event Logo, or Default */}
+                {partner?.logo_url ? (
                   <img 
                     src={partner.logo_url} 
                     alt={partner.company_name || 'Partner'}
                     className="w-10 h-10 rounded-lg object-cover"
                   />
-                )}
-                {/* Event Logo */}
-                {event.logo_url ? (
+                ) : event.logo_url ? (
                   <img 
                     src={event.logo_url} 
                     alt={event.event_name}

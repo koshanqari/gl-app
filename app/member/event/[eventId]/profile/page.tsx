@@ -23,7 +23,8 @@ import {
   ExternalLink,
   Edit,
   Save,
-  X
+  X,
+  ShieldCheck
 } from "lucide-react";
 import { useMemberEventData } from "@/contexts/member-event-data-context";
 
@@ -310,6 +311,15 @@ export default function MemberProfilePage() {
           KYC Information
         </MobileCardHeader>
         <MobileCardContent>
+          {/* Privacy Notice */}
+          <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl mb-4 border border-slate-100">
+            <ShieldCheck className="h-5 w-5 text-slate-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Your document details are collected solely for identity verification at the venue (hotel check-in, event entry, etc.). 
+              This information will not be used for any other purpose or shared with third parties.
+            </p>
+          </div>
+          
           {isEditingKYC || (
             !memberData.kyc_document_type && 
             !memberData.kyc_document_number && 
