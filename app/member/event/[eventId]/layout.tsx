@@ -221,17 +221,24 @@ export default function MemberEventLayout({
           // Fetch RSVPs for each schedule if KYC complete
           if (kycComplete && memberRecord) {
             const rsvpMap: Record<string, string | null> = {};
-            for (const schedule of travelData.schedules) {
+            // Fetch all RSVPs in parallel for better performance
+            const rsvpPromises = travelData.schedules.map(async (schedule: any) => {
               try {
-                const rsvpResponse = await fetch(`/api/travel/${schedule.id}/rsvp`);
+                const rsvpResponse = await fetch(`/api/travel/${schedule.id}/rsvp?member_id=${memberRecord.id}`);
                 const rsvpData = await rsvpResponse.json();
-                if (rsvpResponse.ok) {
-                  rsvpMap[schedule.id] = rsvpData.rsvp || null;
+                if (rsvpResponse.ok && rsvpData.rsvp) {
+                  return { scheduleId: schedule.id, response: rsvpData.rsvp.response };
                 }
               } catch (e) {
                 // Ignore individual RSVP fetch errors
               }
-            }
+              return { scheduleId: schedule.id, response: null };
+            });
+            
+            const rsvpResults = await Promise.all(rsvpPromises);
+            rsvpResults.forEach(result => {
+              rsvpMap[result.scheduleId] = result.response;
+            });
             setTravelRsvps(rsvpMap);
           }
         }
