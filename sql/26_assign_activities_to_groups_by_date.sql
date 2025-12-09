@@ -32,3 +32,4 @@ JOIN app.itinerary_activities a ON a.event_id = e.id AND a.is_active = TRUE
 WHERE e.event_name = 'Dubai Agency FLY Jul''25'
 GROUP BY e.id, e.event_name;
 
+

@@ -48,3 +48,4 @@ CREATE TRIGGER trigger_update_itinerary_groups_updated_at
 SELECT 'itinerary_groups table created' as status;
 SELECT 'group_id column added to itinerary_activities' as status;
 
+

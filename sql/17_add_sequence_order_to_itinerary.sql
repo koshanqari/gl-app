@@ -25,3 +25,4 @@ WHERE app.itinerary_activities.id = subq.id;
 -- Add comment
 COMMENT ON COLUMN app.itinerary_activities.sequence_order IS 'Order of activity within a day (1, 2, 3...). Used for narrative-style itineraries.';
 
+

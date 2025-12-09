@@ -39,3 +39,4 @@ COMMENT ON TABLE app.travel_schedules IS 'Stores travel schedules (cabs, buses, 
 COMMENT ON TABLE app.travel_rsvps IS 'Stores member RSVP responses for travel schedules';
 
 
+

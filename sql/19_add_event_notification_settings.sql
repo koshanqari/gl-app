@@ -13,3 +13,4 @@ FROM app.events
 WHERE is_active = TRUE 
 LIMIT 5;
 
+

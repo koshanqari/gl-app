@@ -103,3 +103,4 @@ FROM app.itinerary_activities
 WHERE is_active = TRUE
 ORDER BY from_datetime, sequence_order;
 
+

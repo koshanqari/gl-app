@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import pool from '@/lib/db';
 import { verifyOTP, cleanupExpiredOTPs } from '@/lib/otp-utils';
 
@@ -83,18 +82,8 @@ export async function POST(request: Request) {
         event_id: member.event_id,
       };
 
-      const cookieStore = await cookies();
-      // Set cookie without httpOnly so client-side can read it (matching existing pattern)
-      cookieStore.set('member-session', JSON.stringify(memberSession), {
-        httpOnly: false, // Allow client-side access for getMemberSession()
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 30, // 30 days
-        path: '/',
-      });
-
-      // Create response
-      return NextResponse.json(
+      // Create response with cookie set on the response object for reliable persistence
+      const response = NextResponse.json(
         {
           status: 'success',
           message: 'Login successful',
@@ -108,6 +97,17 @@ export async function POST(request: Request) {
         },
         { status: 200 }
       );
+
+      // Set cookie on response - this is more reliable than using cookies() in App Router
+      response.cookies.set('member-session', JSON.stringify(memberSession), {
+        httpOnly: false, // Allow client-side access for getMemberSession()
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        path: '/',
+      });
+
+      return response;
     } catch (dbError: any) {
       throw dbError;
     } finally {

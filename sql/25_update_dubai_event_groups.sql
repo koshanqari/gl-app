@@ -54,3 +54,4 @@ LEFT JOIN app.itinerary_groups g ON g.event_id = e.id AND g.is_active = TRUE
 WHERE e.event_name = 'Dubai Agency FLY Jul''25'
 ORDER BY g.group_order;
 
+
