@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import pool from '@/lib/db';
 import { checkPermission } from '@/lib/auth-helpers';
 
@@ -15,9 +16,28 @@ export async function GET(request: Request) {
       }, { status: 400 });
     }
 
-    // Check permission
+    // Check permission - allow executives, collaborators, AND members
     const { allowed } = await checkPermission('itinerary', eventId);
+    
+    // If not executive/collaborator, check for member session
+    let isMember = false;
     if (!allowed) {
+      const cookieStore = await cookies();
+      const memberSession = cookieStore.get('member-session')?.value;
+      if (memberSession) {
+        try {
+          const session = JSON.parse(memberSession);
+          // Member is authenticated, allow read access to groups
+          if (session.email) {
+            isMember = true;
+          }
+        } catch {
+          // Invalid session
+        }
+      }
+    }
+
+    if (!allowed && !isMember) {
       return NextResponse.json({
         status: 'error',
         message: 'Unauthorized - No session found or insufficient permissions',

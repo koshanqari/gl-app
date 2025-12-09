@@ -31,6 +31,9 @@ export default function MemberEventLayout({
   const [roomAssignment, setRoomAssignment] = useState<any>(null);
   const [roommates, setRoommates] = useState<any[]>([]);
   const [itineraryActivities, setItineraryActivities] = useState<any[]>([]);
+  const [itineraryGroups, setItineraryGroups] = useState<any[]>([]);
+  const [travelSchedules, setTravelSchedules] = useState<any[]>([]);
+  const [travelRsvps, setTravelRsvps] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     // Check if member is logged in
@@ -193,7 +196,47 @@ export default function MemberEventLayout({
           }
         }
 
-        // Step 7: Complete (100%)
+        // Step 4: Fetch itinerary groups and travel data (85%)
+        setLoadingProgress(85);
+        const additionalPromises: Promise<Response>[] = [
+          fetch(`/api/itinerary-groups?event_id=${eventId}`),
+          fetch(`/api/travel?event_id=${eventId}`),
+        ];
+
+        const additionalResponses = await Promise.all(additionalPromises);
+        const groupsResponse = additionalResponses[0];
+        const travelResponse = additionalResponses[1];
+
+        // Process itinerary groups
+        const groupsData = await groupsResponse.json();
+        if (groupsResponse.ok && groupsData.groups) {
+          setItineraryGroups(groupsData.groups);
+        }
+
+        // Process travel schedules
+        const travelData = await travelResponse.json();
+        if (travelResponse.ok && travelData.schedules) {
+          setTravelSchedules(travelData.schedules);
+          
+          // Fetch RSVPs for each schedule if KYC complete
+          if (kycComplete && memberRecord) {
+            const rsvpMap: Record<string, string | null> = {};
+            for (const schedule of travelData.schedules) {
+              try {
+                const rsvpResponse = await fetch(`/api/travel/${schedule.id}/rsvp`);
+                const rsvpData = await rsvpResponse.json();
+                if (rsvpResponse.ok) {
+                  rsvpMap[schedule.id] = rsvpData.rsvp || null;
+                }
+              } catch (e) {
+                // Ignore individual RSVP fetch errors
+              }
+            }
+            setTravelRsvps(rsvpMap);
+          }
+        }
+
+        // Step 5: Complete (100%)
         setLoadingProgress(100);
         await new Promise(resolve => setTimeout(resolve, 300));
         setLoading(false);
@@ -296,6 +339,9 @@ export default function MemberEventLayout({
         roommates: roommates || [],
         isKYCComplete: isKYCComplete || false,
         itineraryActivities: itineraryActivities || [],
+        itineraryGroups: itineraryGroups || [],
+        travelSchedules: travelSchedules || [],
+        travelRsvps: travelRsvps || {},
       }}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex justify-center">

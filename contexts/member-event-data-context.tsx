@@ -10,6 +10,9 @@ interface MemberEventData {
   roommates: any[];
   isKYCComplete: boolean;
   itineraryActivities: any[];
+  itineraryGroups: any[];
+  travelSchedules: any[];
+  travelRsvps: Record<string, string | null>; // schedule_id -> response
 }
 
 const MemberEventDataContext = createContext<MemberEventData | null>(null);

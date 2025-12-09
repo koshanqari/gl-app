@@ -37,89 +37,60 @@ interface ItineraryGroup {
 export default function MemberItineraryPage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const { isKYCComplete, itineraryActivities } = useMemberEventData();
+  const { isKYCComplete, itineraryActivities, itineraryGroups } = useMemberEventData();
   const activities = itineraryActivities || [];
-  const [groups, setGroups] = useState<ItineraryGroup[]>([]);
-  const [event, setEvent] = useState<any>(null);
+  const groups = itineraryGroups || [];
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const hasInitialized = useRef(false);
 
-  // Fetch groups and event data
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [eventResponse, groupsResponse] = await Promise.all([
-          fetch(`/api/events/${eventId}`),
-          fetch(`/api/itinerary-groups?event_id=${eventId}`),
-        ]);
-        
-        const eventData = await eventResponse.json();
-        const groupsData = await groupsResponse.json();
-        
-        if (eventResponse.ok && eventData.event) {
-          setEvent(eventData.event);
+  // Group activities when both groups and activities are available
+  const groupedActivities = useMemo(() => {
+    if (groups.length === 0) return [];
+    
+    // Create a map of activities by group_id
+    const activitiesByGroup: Record<string, ItineraryActivity[]> = {};
+    const ungrouped: ItineraryActivity[] = [];
+    
+    activities.forEach((activity: ItineraryActivity) => {
+      if (activity.group_id) {
+        if (!activitiesByGroup[activity.group_id]) {
+          activitiesByGroup[activity.group_id] = [];
         }
-        if (groupsResponse.ok && groupsData.groups) {
-          // Group activities by group_id
-          const grouped: ItineraryGroup[] = [];
-          const ungrouped: ItineraryActivity[] = [];
-          
-          activities.forEach((activity: ItineraryActivity) => {
-            if (activity.group_id) {
-              const group = groupsData.groups.find((g: any) => g.id === activity.group_id);
-              if (group) {
-                let groupItem = grouped.find(g => g.id === group.id);
-                if (!groupItem) {
-                  groupItem = {
-                    id: group.id,
-                    group_name: group.group_name,
-                    group_order: group.group_order,
-                    activities: [],
-                  };
-                  grouped.push(groupItem);
-                }
-                groupItem.activities.push(activity);
-              }
-            } else {
-              ungrouped.push(activity);
-            }
-          });
-          
-          // Sort groups by group_order
-          grouped.sort((a, b) => a.group_order - b.group_order);
-          
-          // Sort activities within each group
-          grouped.forEach(g => {
-            g.activities.sort((a, b) => (a.sequence_order || 0) - (b.sequence_order || 0));
-          });
-          
-          // Add ungrouped if any (only if no groups exist)
-          if (ungrouped.length > 0 && grouped.length === 0) {
-            grouped.push({
-              id: 'ungrouped',
-              group_name: 'Itinerary',
-              group_order: 999,
-              activities: ungrouped.sort((a, b) => (a.sequence_order || 0) - (b.sequence_order || 0)),
-            });
-          }
-          
-          setGroups(grouped);
-        }
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
+        activitiesByGroup[activity.group_id].push(activity);
+      } else {
+        ungrouped.push(activity);
       }
-    };
-    fetchData();
-  }, [eventId, activities]);
+    });
+    
+    // Create grouped array from API groups
+    const grouped: ItineraryGroup[] = groups.map((group: any) => ({
+      id: group.id,
+      group_name: group.group_name,
+      group_order: group.group_order,
+      activities: (activitiesByGroup[group.id] || []).sort((a, b) => (a.sequence_order || 0) - (b.sequence_order || 0)),
+    }));
+    
+    // Add ungrouped activities if any exist
+    if (ungrouped.length > 0) {
+      grouped.push({
+        id: 'ungrouped',
+        group_name: 'Other Activities',
+        group_order: 999,
+        activities: ungrouped.sort((a, b) => (a.sequence_order || 0) - (b.sequence_order || 0)),
+      });
+    }
+    
+    return grouped;
+  }, [groups, activities]);
 
-  // Initialize expanded groups (expand all groups by default) - only once when groups first load
+  // Initialize expanded groups (expand all groups by default) - only once when groupedActivities first load
   useEffect(() => {
-    if (groups.length > 0 && !hasInitialized.current) {
+    if (groupedActivities.length > 0 && !hasInitialized.current) {
       // Expand all groups by default on first load
-      setExpandedGroups(new Set(groups.map(g => g.id)));
+      setExpandedGroups(new Set(groupedActivities.map(g => g.id)));
       hasInitialized.current = true;
     }
-  }, [groups.length]);
+  }, [groupedActivities.length]);
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups(prev => {
@@ -142,11 +113,11 @@ export default function MemberItineraryPage() {
   }
 
 
-  if (activities.length === 0) {
-  return (
+  if (groupedActivities.length === 0 && activities.length === 0) {
+    return (
       <MobileContainer>
-    <MobileEmptyState
-      icon={Calendar}
+        <MobileEmptyState
+          icon={Calendar}
           title="No Activities Scheduled"
           description="Event itinerary will appear here once activities are added"
         />
@@ -173,7 +144,7 @@ export default function MemberItineraryPage() {
   return (
     <MobileContainer>
       <div className="space-y-4">
-        {groups.map((group) => {
+        {groupedActivities.map((group) => {
           const isExpanded = expandedGroups.has(group.id);
           
           return (

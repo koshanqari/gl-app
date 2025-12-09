@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { MobileEmptyState, MobileContainer, MobileCard, MobileCardHeader, MobileCardContent } from "@/components/mobile";
 import { KYCRequiredMessage } from "@/components/mobile/kyc-required-message";
 import { useMemberEventData } from "@/contexts/member-event-data-context";
@@ -28,9 +28,8 @@ interface TravelSchedule {
 export default function MemberTravelPage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const { isKYCComplete, memberData } = useMemberEventData();
-  const [schedules, setSchedules] = useState<TravelSchedule[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isKYCComplete, memberData, travelSchedules, travelRsvps } = useMemberEventData();
+  const [localRsvps, setLocalRsvps] = useState<Record<string, string | null>>({});
   const [updatingRsvp, setUpdatingRsvp] = useState<string | null>(null);
   
   // Fallback KYC check from memberData if context doesn't have it
@@ -40,71 +39,22 @@ export default function MemberTravelPage() {
     memberData?.kyc_document_url
   );
 
+  // Initialize local RSVPs from context
   useEffect(() => {
-    console.log('Travel page - KYC status:', { isKYCComplete, kycComplete, memberData: !!memberData, eventId });
-    
-    if (!kycComplete) {
-      console.log('Travel page - KYC not complete, showing KYC required message');
-      setIsLoading(false);
-      return;
+    if (travelRsvps) {
+      setLocalRsvps(travelRsvps);
     }
+  }, [travelRsvps]);
 
-    const fetchSchedules = async () => {
-      try {
-        setIsLoading(true);
-        console.log('Travel page - Fetching schedules for event:', eventId);
-        const response = await fetch(`/api/travel?event_id=${eventId}`);
-        const data = await response.json();
-
-        console.log('Travel page - API response:', { ok: response.ok, schedules: data.schedules?.length || 0 });
-
-        if (response.ok && data.schedules) {
-          const member = getMemberSession();
-          if (!member) return;
-
-          // Fetch RSVP for each schedule
-          const schedulesWithRsvp = await Promise.all(
-            data.schedules.map(async (schedule: TravelSchedule) => {
-              try {
-                const rsvpResponse = await fetch(
-                  `/api/travel/${schedule.id}/rsvp?member_id=${member.id}`
-                );
-                const rsvpData = await rsvpResponse.json();
-                
-                if (rsvpResponse.ok && rsvpData.rsvp && rsvpData.rsvp.id) {
-                  return {
-                    ...schedule,
-                    rsvp: { 
-                      response: rsvpData.rsvp.response as 'yes' | 'maybe' | 'no',
-                      responded_at: rsvpData.rsvp.responded_at
-                    }
-                  };
-                }
-              } catch (error) {
-                console.error('Failed to fetch RSVP:', error);
-              }
-              
-              return {
-                ...schedule,
-                rsvp: null // No default RSVP - user hasn't responded yet
-              };
-            })
-          );
-
-          setSchedules(schedulesWithRsvp);
-          console.log('Travel page - Set schedules:', schedulesWithRsvp.length);
-        } else {
-          console.error('Travel page - API error:', data.message || 'Unknown error');
-        }
-      } catch (error) {
-        console.error('Travel page - Failed to fetch travel schedules:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSchedules();
-  }, [eventId, kycComplete]);
+  // Merge schedules with RSVP data
+  const schedules: TravelSchedule[] = useMemo(() => {
+    return (travelSchedules || []).map((schedule: any) => ({
+      ...schedule,
+      rsvp: localRsvps[schedule.id] 
+        ? { response: localRsvps[schedule.id] as 'yes' | 'maybe' | 'no' }
+        : null
+    }));
+  }, [travelSchedules, localRsvps]);
 
   const handleRsvp = async (scheduleId: string, response: 'yes' | 'maybe' | 'no') => {
     const member = getMemberSession();
@@ -124,18 +74,11 @@ export default function MemberTravelPage() {
       const rsvpData = await rsvpResponse.json();
 
       if (rsvpResponse.ok) {
-        // Update local state
-        setSchedules(prev => prev.map(schedule => 
-          schedule.id === scheduleId
-            ? { 
-                ...schedule, 
-                rsvp: { 
-                  response, 
-                  responded_at: new Date().toISOString() 
-                } 
-              }
-            : schedule
-        ));
+        // Update local RSVP state
+        setLocalRsvps(prev => ({
+          ...prev,
+          [scheduleId]: response
+        }));
       } else {
         alert(rsvpData.message || 'Failed to update RSVP');
       }
@@ -151,16 +94,6 @@ export default function MemberTravelPage() {
     return (
       <MobileContainer>
         <KYCRequiredMessage eventId={eventId} />
-      </MobileContainer>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <MobileContainer>
-        <div className="text-center py-12">
-          <p className="text-slate-500">Loading travel schedules...</p>
-        </div>
       </MobileContainer>
     );
   }
