@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getAndClearRedirectUrl } from "@/lib/auth-cookies";
+import { getAndClearRedirectUrl, setMemberSession, getLastVisitedPage } from "@/lib/auth-cookies";
 import Image from "next/image";
 
 export default function MemberLogin() {
@@ -90,13 +90,25 @@ export default function MemberLogin() {
         return;
       }
 
-      console.log('[Member Login] OTP verified successfully, redirecting...');
+      console.log('[Member Login] OTP verified successfully, setting session...');
+
+      // Set session cookie client-side (same pattern as executive login)
+      // This ensures the cookie is set reliably across all browsers
+      setMemberSession({
+        id: data.member.id,
+        email: data.member.email,
+        employee_id: data.member.employee_id,
+        name: data.member.name,
+        event_id: data.member.event_id,
+      });
 
       // Small delay to ensure cookie is set before navigation
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Check for redirect URL or default to events page
-      const redirectUrl = getAndClearRedirectUrl() || "/member/events";
+      // Priority: 1. Explicit redirect URL, 2. Last visited page, 3. Default to events
+      const explicitRedirect = getAndClearRedirectUrl();
+      const lastVisited = getLastVisitedPage('member');
+      const redirectUrl = explicitRedirect || lastVisited || "/member/events";
       
       console.log('[Member Login] Redirecting to:', redirectUrl);
       

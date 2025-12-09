@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { MobileFooter } from "@/components/mobile";
 import { Calendar, MapPin, Building2, ArrowRight, LogOut } from "lucide-react";
 import { LoadingScreen } from "@/components/loading-screen";
-import { getMemberSession, clearMemberSession, setRedirectUrl, setLastVisitedPage } from "@/lib/auth-cookies";
+import { getMemberSession, clearMemberSession, setRedirectUrl, setLastVisitedPage, getLastVisitedPage } from "@/lib/auth-cookies";
 
 export default function MemberEventsPage() {
   const router = useRouter();
@@ -87,9 +87,20 @@ export default function MemberEventsPage() {
           } else if (events.length === 1 && !hasAutoRedirected.current) {
             // Initial load with single event - auto-redirect
             hasAutoRedirected.current = true;
+            const singleEventId = events[0].id;
+            
+            // Check if there's a last visited page within this event
+            const lastVisited = getLastVisitedPage('member');
+            let redirectTo = `/member/event/${singleEventId}/profile`;
+            
+            // If last visited was within this same event, go there instead
+            if (lastVisited && lastVisited.includes(`/member/event/${singleEventId}/`)) {
+              redirectTo = lastVisited;
+            }
+            
             // Small delay to ensure state is set
             await new Promise(resolve => setTimeout(resolve, 100));
-            router.push(`/member/event/${events[0].id}/profile`);
+            router.push(redirectTo);
             return; // Don't continue with loading screen
           }
         }
