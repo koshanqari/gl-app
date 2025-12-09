@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Mail, Phone, User, Edit, FileCheck, ExternalLink } from "lucide-react";
+import { FileText, Mail, Phone, User, Edit, FileCheck, ExternalLink, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -31,9 +31,10 @@ interface MemberDetailsDialogProps {
   onClose: () => void;
   member: Member | null;
   onEdit: () => void;
+  onDelete?: () => void;
 }
 
-export function MemberDetailsDialog({ isOpen, onClose, member, onEdit }: MemberDetailsDialogProps) {
+export function MemberDetailsDialog({ isOpen, onClose, member, onEdit, onDelete }: MemberDetailsDialogProps) {
   if (!member) return null;
 
   const getDocumentTypeName = (type: string) => {
@@ -54,10 +55,22 @@ export function MemberDetailsDialog({ isOpen, onClose, member, onEdit }: MemberD
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle>Member Details</DialogTitle>
-            <Button onClick={onEdit} size="sm" className="mr-8">
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
+            <div className="flex items-center gap-2 mr-8">
+              {onDelete && (
+                <Button 
+                  onClick={onDelete} 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-9 w-9 text-slate-600 hover:text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+              <Button onClick={onEdit} size="sm">
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+            </div>
           </div>
         </DialogHeader>
 

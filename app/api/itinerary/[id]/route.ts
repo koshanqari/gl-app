@@ -13,7 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const activityResult = await client.query(
         `SELECT 
           id, event_id, name, from_datetime, to_datetime, venue, description,
-          is_active, created_at, updated_at
+          sequence_order, is_active, created_at, updated_at
         FROM app.itinerary_activities 
         WHERE id = $1 AND is_active = TRUE`,
         [id]
@@ -100,6 +100,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       to_datetime,
       venue,
       description,
+      sequence_order,
       links = [],
     } = body;
 
@@ -124,15 +125,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           to_datetime = $3,
           venue = $4,
           description = $5,
+          sequence_order = COALESCE($6, sequence_order),
           updated_at = NOW()
-        WHERE id = $6 AND is_active = TRUE
-        RETURNING id, event_id, name, from_datetime, to_datetime, venue, description, is_active, created_at, updated_at`,
+        WHERE id = $7 AND is_active = TRUE
+        RETURNING id, event_id, name, from_datetime, to_datetime, venue, description, sequence_order, is_active, created_at, updated_at`,
         [
           name,
           from_datetime,
           to_datetime || null,
           venue || null,
           description || null,
+          sequence_order,
           id,
         ]
       );

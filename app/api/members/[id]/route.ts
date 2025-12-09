@@ -198,23 +198,44 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 // DELETE member (soft delete)
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // Get session from cookies (server-side)
-    const cookieStore = await cookies();
-    const executiveSession = cookieStore.get('executive-session')?.value;
+    const { id } = await params;
     
-    if (!executiveSession) {
+    // First, get the member to check event_id
+    const client = await pool.connect();
+    let memberEventId: string | null = null;
+    
+    try {
+      const memberResult = await client.query(
+        `SELECT event_id FROM app.members WHERE id = $1 AND is_active = TRUE`,
+        [id]
+      );
+      
+      if (memberResult.rows.length === 0) {
+        client.release();
+        return NextResponse.json({
+          status: 'error',
+          message: 'Member not found or already inactive',
+        }, { status: 404 });
+      }
+      
+      memberEventId = memberResult.rows[0].event_id;
+    } finally {
+      client.release();
+    }
+
+    // Check authentication and permissions (executive or collaborator with members permission)
+    const { allowed } = await checkPermission('members', memberEventId || undefined);
+    if (!allowed) {
       return NextResponse.json({
         status: 'error',
-        message: 'Unauthorized - No session found',
+        message: 'Unauthorized - No session found or insufficient permissions',
       }, { status: 401 });
     }
 
-    const { id } = await params;
-    
-    const client = await pool.connect();
+    const deleteClient = await pool.connect();
     
     try {
-      const result = await client.query(
+      const result = await deleteClient.query(
         `UPDATE app.members 
         SET is_active = FALSE, updated_at = NOW() 
         WHERE id = $1 
@@ -235,7 +256,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       }, { status: 200 });
       
     } finally {
-      client.release();
+      deleteClient.release();
     }
   } catch (error: any) {
     console.error('Failed to delete member:', error);

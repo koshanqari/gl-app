@@ -19,14 +19,14 @@ export async function GET(request: Request) {
     const client = await pool.connect();
     
     try {
-      // Fetch activities
+      // Fetch activities with sequence_order for day-based grouping
       const activitiesResult = await client.query(
         `SELECT 
           id, event_id, name, from_datetime, to_datetime, venue, description,
-          is_active, created_at, updated_at
+          sequence_order, is_active, created_at, updated_at
         FROM app.itinerary_activities
         WHERE event_id = $1 AND is_active = TRUE
-        ORDER BY from_datetime ASC`,
+        ORDER BY DATE(from_datetime) ASC, sequence_order ASC, from_datetime ASC`,
         [eventId]
       );
 
@@ -88,6 +88,7 @@ export async function POST(request: Request) {
       to_datetime,
       venue,
       description,
+      sequence_order,
       links = [],
     } = body;
 
@@ -114,12 +115,24 @@ export async function POST(request: Request) {
     try {
       await client.query('BEGIN');
 
+      // Get next sequence order if not provided
+      let finalSequenceOrder = sequence_order;
+      if (finalSequenceOrder === undefined || finalSequenceOrder === null) {
+        const maxSeqResult = await client.query(
+          `SELECT COALESCE(MAX(sequence_order), 0) + 1 as next_seq
+           FROM app.itinerary_activities
+           WHERE event_id = $1 AND DATE(from_datetime) = DATE($2) AND is_active = TRUE`,
+          [event_id, from_datetime]
+        );
+        finalSequenceOrder = maxSeqResult.rows[0].next_seq;
+      }
+
       // Insert activity
       const activityResult = await client.query(
         `INSERT INTO app.itinerary_activities 
-          (event_id, name, from_datetime, to_datetime, venue, description, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, event_id, name, from_datetime, to_datetime, venue, description, is_active, created_at, updated_at`,
+          (event_id, name, from_datetime, to_datetime, venue, description, sequence_order, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, event_id, name, from_datetime, to_datetime, venue, description, sequence_order, is_active, created_at, updated_at`,
         [
           event_id,
           name,
@@ -127,6 +140,7 @@ export async function POST(request: Request) {
           to_datetime || null,
           venue || null,
           description || null,
+          finalSequenceOrder,
           userId,
         ]
       );

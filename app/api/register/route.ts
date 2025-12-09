@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { sendNotificationViaN8N } from '@/lib/n8n-otp-service';
 
 // POST - Public member registration (no auth required)
 export async function POST(request: Request) {
@@ -44,9 +45,14 @@ export async function POST(request: Request) {
     const client = await pool.connect();
     
     try {
-      // Verify event exists and is active
+      // Verify event exists and is active, get event and partner details
       const eventCheck = await client.query(
-        `SELECT id FROM app.events WHERE id = $1 AND is_active = TRUE`,
+        `SELECT 
+          e.id, e.event_name, e.send_registration_notification,
+          p.company_name as client_name
+        FROM app.events e
+        LEFT JOIN app.partners p ON e.partner_id = p.id
+        WHERE e.id = $1 AND e.is_active = TRUE`,
         [event_id]
       );
 
@@ -56,6 +62,8 @@ export async function POST(request: Request) {
           message: 'Event not found or inactive',
         }, { status: 404 });
       }
+
+      const eventData = eventCheck.rows[0];
 
       // Check if employee_id already exists for this event
       const employeeCheck = await client.query(
@@ -100,6 +108,27 @@ export async function POST(request: Request) {
           phone,
         ]
       );
+
+      // Send registration notification to n8n (non-blocking) if enabled for this event
+      const useN8N = process.env.USE_N8N_NOTIFICATIONS !== 'false' && process.env.N8N_NOTIFICATION_WEBHOOK_URL;
+      const sendNotification = eventData.send_registration_notification !== false; // Default to true
+      if (useN8N && sendNotification) {
+        sendNotificationViaN8N({
+          name: name,
+          phone: phone,
+          countryCode: country_code || '+91',
+          email: email,
+          type: 'registration',
+          data: {
+            client_name: eventData.client_name || 'Unknown Client',
+            event_name: eventData.event_name || 'Unknown Event',
+            employee_id: employee_id,
+          },
+        }).catch((error) => {
+          console.error('[Registration] Failed to send n8n notification:', error);
+          // Don't fail registration if notification fails
+        });
+      }
 
       return NextResponse.json({ 
         status: 'success', 

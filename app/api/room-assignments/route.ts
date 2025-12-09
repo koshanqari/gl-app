@@ -27,7 +27,6 @@ export async function GET(request: Request) {
           ra.room_number,
           ra.room_type,
           ra.special_requests,
-          ra.status,
           ra.is_active,
           ra.created_at,
           ra.updated_at
@@ -59,7 +58,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const {
+    let {
       event_id,
       member_id,
       room_number,
@@ -67,10 +66,15 @@ export async function POST(request: Request) {
       special_requests,
     } = body;
 
-    if (!event_id || !member_id || !room_number) {
+    // Normalize empty strings to null
+    room_number = room_number && room_number.trim() !== '' ? room_number.trim() : null;
+    room_type = room_type && room_type.trim() !== '' ? room_type.trim() : null;
+    special_requests = special_requests && special_requests.trim() !== '' ? special_requests.trim() : null;
+
+    if (!event_id || !member_id) {
       return NextResponse.json({
         status: 'error',
-        message: 'event_id, member_id, and room_number are required',
+        message: 'event_id and member_id are required',
       }, { status: 400 });
     }
 
@@ -98,7 +102,7 @@ export async function POST(request: Request) {
       let result;
       
       if (existingResult.rows.length > 0) {
-        // Update existing assignment
+        // Update existing assignment (allows setting room_number to NULL)
         result = await client.query(
           `UPDATE app.room_assignments
            SET room_number = $1, room_type = $2, special_requests = $3, updated_at = NOW()
@@ -107,11 +111,19 @@ export async function POST(request: Request) {
           [room_number, room_type, special_requests, event_id, member_id]
         );
       } else {
-        // Create new assignment
+        // Create new assignment - allow creating with just room_type/special_requests (HR can fill first, hotel adds room_number later)
+        // At least one field should be provided
+        if (!room_number && !room_type && !special_requests) {
+          return NextResponse.json({
+            status: 'error',
+            message: 'At least one field (room_type, special_requests, or room_number) is required for new assignments',
+          }, { status: 400 });
+        }
+        
         result = await client.query(
           `INSERT INTO app.room_assignments 
-            (event_id, member_id, room_number, room_type, special_requests, status, created_by)
-           VALUES ($1, $2, $3, $4, $5, 'assigned', $6)
+            (event_id, member_id, room_number, room_type, special_requests, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING *`,
           [event_id, member_id, room_number, room_type, special_requests, created_by]
         );

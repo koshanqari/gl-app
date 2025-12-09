@@ -2,7 +2,7 @@
 
 import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, LayoutDashboard, Users, Home, FileText, LogOut, Building2, Calendar, Plane, UtensilsCrossed, UserCog, UserPlus, RefreshCw } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, Users, Home, FileText, LogOut, Building2, Calendar, Plane, UtensilsCrossed, UserCog, UserPlus, RefreshCw, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ExecutiveFooter } from "@/components/executive-footer";
 import { useEffect, useState, useRef } from "react";
@@ -262,6 +262,15 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
                 </Button>
               )}
               <div className="flex items-center gap-3">
+                {/* Partner Logo */}
+                {partner?.logo_url && (
+                  <img 
+                    src={partner.logo_url} 
+                    alt={partner.company_name || 'Partner'}
+                    className="w-10 h-10 rounded-lg object-cover"
+                  />
+                )}
+                {/* Event Logo */}
                 {event.logo_url ? (
                   <img 
                     src={event.logo_url} 
@@ -276,7 +285,7 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
                 <div>
                   <h1 className="text-xl font-bold text-slate-900">{event.event_name}</h1>
                   <p className="text-xs text-slate-500">
-                    {partner.company_name} • {event.event_type}
+                    {partner?.company_name} • {event.event_type}
                     {userRole === "collaborator" && " • Collaborator Access"}
                   </p>
                 </div>
@@ -393,17 +402,14 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
             {permissions.travel && (
               <Link
                 href={`/executive/event_portal/${eventId}/travel`}
-                className={`w-full flex items-center justify-between px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                className={`w-full flex items-center justify-start px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                   pathname === `/executive/event_portal/${eventId}/travel`
                     ? "bg-primary text-primary-foreground"
                     : "text-slate-700 hover:bg-slate-100"
                 }`}
               >
-                <div className="flex items-center">
-                  <Plane className="mr-2 h-4 w-4" />
-                  Travel
-                </div>
-                <span className="text-xs text-slate-500">Soon</span>
+                <Plane className="mr-2 h-4 w-4" />
+                Travel
               </Link>
             )}
             
@@ -435,6 +441,20 @@ function EventLayoutContent({ children }: { children: React.ReactNode }) {
               >
                 <Calendar className="mr-2 h-4 w-4" />
                 Event Profile
+              </Link>
+            )}
+            
+            {permissions.event_profile && (
+              <Link
+                href={`/executive/event_portal/${eventId}/settings`}
+                className={`w-full flex items-center justify-start px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  pathname === `/executive/event_portal/${eventId}/settings`
+                    ? "bg-primary text-primary-foreground"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
               </Link>
             )}
             

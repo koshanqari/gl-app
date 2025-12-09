@@ -1,3 +1,23 @@
+/**
+ * Example: Refactored send-otp route using generic n8n notification service
+ * 
+ * To use this:
+ * 1. Set N8N_NOTIFICATION_WEBHOOK_URL in .env.local
+ * 2. Optionally set N8N_WEBHOOK_SECRET for authentication
+ * 3. Set USE_N8N_NOTIFICATIONS=true to enable n8n, false to use direct sending
+ * 4. Rename this file to route.ts (or merge changes)
+ * 
+ * n8n will receive:
+ * {
+ *   name: "John Doe",
+ *   phone: "1234567890",
+ *   countryCode: "+91",
+ *   email: "john@example.com",
+ *   type: "OTP",
+ *   data: { otp: "123456" }
+ * }
+ */
+
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { generateOTP, storeOTP, canResendOTP, cleanupExpiredOTPs } from '@/lib/otp-utils';
@@ -64,12 +84,11 @@ export async function POST(request: Request) {
 
       // Generate OTP
       const otp = generateOTP();
-      // Store using the email from the request (will be normalized in storeOTP)
       console.log('[Send OTP] Storing OTP for email:', email);
       await storeOTP(email, otp);
 
       // Check if n8n should be used
-      const useN8N = process.env.USE_N8N_NOTIFICATIONS !== 'false' && process.env.N8N_NOTIFICATION_WEBHOOK_URL;
+      const useN8N = process.env.USE_N8N_NOTIFICATIONS === 'true' && process.env.N8N_NOTIFICATION_WEBHOOK_URL;
 
       let deliveryResult;
       let sentVia = { email: false, sms: false };
@@ -105,7 +124,7 @@ export async function POST(request: Request) {
           };
         }
       } else {
-        // Direct sending (fallback)
+        // Direct sending (current implementation)
         console.log('[Send OTP] Using direct sending (n8n disabled)');
         deliveryResult = await sendOTPFallback(
           member.email,
@@ -154,4 +173,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

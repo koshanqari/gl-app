@@ -293,6 +293,7 @@ export default function StayManagementPage() {
   const handleDownloadCSV = () => {
     // Create CSV content with headers
     const headers = [
+      "Member ID",
       "Check-in",
       "Time",
       "Member",
@@ -301,8 +302,9 @@ export default function StayManagementPage() {
       "KYC Type",
       "KYC Number",
       "KYC Document Link",
-      "Room Number",
-      "Room Type"
+      "Room Type",
+      "Special Requests",
+      "Room Number"
     ];
     
     // Create rows from member assignments
@@ -328,6 +330,7 @@ export default function StayManagementPage() {
         : '';
       
       return [
+        member.id || '',
         isCheckedIn ? 'Yes' : 'No',
         checkInTime,
         member.name || '',
@@ -336,8 +339,9 @@ export default function StayManagementPage() {
         member.kyc_document_type || '',
         member.kyc_document_number || '',
         kycDocumentLink,
-        member.room_number || '',
         member.room_type || '',
+        member.special_requests || '',
+        member.room_number || '',
       ].map(cell => {
         const escaped = String(cell).replace(/"/g, '""');
         return `"${escaped}"`;
@@ -387,19 +391,21 @@ export default function StayManagementPage() {
           return headers.findIndex((h: string) => h.toLowerCase().replace(' (optional)', '') === name.toLowerCase());
         };
 
+        const memberIdIdx = getHeaderIndex('Member ID');
         const checkInIdx = getHeaderIndex('Check-in');
         const timeIdx = getHeaderIndex('Time');
         const memberIdx = getHeaderIndex('Member');
         const empIdIdx = getHeaderIndex('Employee ID');
-        const roomNumberIdx = getHeaderIndex('Room Number');
         const roomTypeIdx = getHeaderIndex('Room Type');
+        const specialRequestsIdx = getHeaderIndex('Special Requests');
+        const roomNumberIdx = getHeaderIndex('Room Number');
 
-        if (empIdIdx === -1) {
-          alert('Invalid CSV format. Employee ID column is required.');
+        if (memberIdIdx === -1 && empIdIdx === -1) {
+          alert('Invalid CSV format. Either Member ID or Employee ID column is required.');
           return;
         }
           
-          let updatedCount = 0;
+        let updatedCount = 0;
         const errors: string[] = [];
 
         // Parse data rows
@@ -435,34 +441,50 @@ export default function StayManagementPage() {
             continue;
           }
 
-          const empId = values[empIdIdx]?.replace(/^"|"$/g, '') || '';
-          if (!empId) continue;
-
-              const member = members.find(m => m.employee_id === empId);
+          // Try to find member by Member ID first, then Employee ID
+          let member = null;
+          const memberId = memberIdIdx >= 0 ? (values[memberIdIdx]?.replace(/^"|"$/g, '') || '') : '';
+          const empId = empIdIdx >= 0 ? (values[empIdIdx]?.replace(/^"|"$/g, '') || '') : '';
+          
+          if (memberId) {
+            member = members.find(m => m.id === memberId);
+          }
+          
+          if (!member && empId) {
+            member = members.find(m => m.employee_id === empId);
+          }
+          
           if (!member) {
-            errors.push(`Row ${i + 1}: Member with Employee ID "${empId}" not found`);
+            const identifier = memberId || empId || 'unknown';
+            errors.push(`Row ${i + 1}: Member with ID "${identifier}" not found`);
             continue;
           }
 
           try {
-            // Update room assignment
-            const roomNumber = roomNumberIdx >= 0 ? (values[roomNumberIdx]?.replace(/^"|"$/g, '') || '') : '';
-            const roomType = roomTypeIdx >= 0 ? (values[roomTypeIdx]?.replace(/^"|"$/g, '') || '') : '';
+            // Update room assignment if columns are present
+            if (roomNumberIdx >= 0 || roomTypeIdx >= 0 || specialRequestsIdx >= 0) {
+              const roomType = roomTypeIdx >= 0 ? (values[roomTypeIdx]?.replace(/^"|"$/g, '') || '') : '';
+              const specialRequests = specialRequestsIdx >= 0 ? (values[specialRequestsIdx]?.replace(/^"|"$/g, '') || '') : '';
+              const roomNumber = roomNumberIdx >= 0 ? (values[roomNumberIdx]?.replace(/^"|"$/g, '') || '') : '';
 
-            if (roomNumber || roomType) {
+              // Update assignment (room_number can be set to null to clear it)
               const response = await fetch('/api/room-assignments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   member_id: member.id,
                   event_id: eventId,
-                  room_number: roomNumber || null,
                   room_type: roomType || null,
+                  special_requests: specialRequests || null,
+                  room_number: roomNumber || null,
                 }),
               });
 
               if (!response.ok) {
-                errors.push(`Row ${i + 1}: Failed to update room assignment for ${empId}`);
+                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                const identifier = memberId || empId || member.name || 'unknown';
+                const errorMsg = errorData.message || errorData.error || 'Failed to update room assignment';
+                errors.push(`Row ${i + 1}: ${errorMsg} for ${identifier}`);
                 continue;
               }
             }
@@ -500,7 +522,8 @@ export default function StayManagementPage() {
 
                 updatedCount++;
           } catch (error) {
-            errors.push(`Row ${i + 1}: Error processing ${empId} - ${error}`);
+            const identifier = memberId || empId;
+            errors.push(`Row ${i + 1}: Error processing ${identifier} - ${error}`);
           }
         }
 
@@ -535,9 +558,9 @@ export default function StayManagementPage() {
         body: JSON.stringify({
           event_id: eventId,
           member_id: selectedMember.id,
-          room_number: assignment.room_number,
           room_type: assignment.room_type,
           special_requests: assignment.special_requests || null,
+          room_number: assignment.room_number,
         }),
       });
 
@@ -569,10 +592,13 @@ export default function StayManagementPage() {
       
       // Find all roommates (members with the same room number, excluding current member)
       let roommates: string[] = [];
-      if (assignment?.room_number) {
+      const hasValidRoomNumber = assignment?.room_number && assignment.room_number.trim() !== '';
+      if (hasValidRoomNumber) {
         const roommateMembers = assignments
           .filter(
             (a) =>
+              a.room_number &&
+              a.room_number.trim() !== '' &&
               a.room_number === assignment.room_number &&
               a.member_id !== member.id
           )
@@ -585,16 +611,19 @@ export default function StayManagementPage() {
         roommates = roommateMembers;
       }
 
+      // Check if member has a valid room assignment
+      const hasRoomNumber = assignment?.room_number && assignment.room_number.trim() !== '';
+      
       return {
         ...member,
-        room_number: assignment?.room_number || null,
+        room_number: hasRoomNumber ? assignment.room_number : null,
         room_type: assignment?.room_type || null,
         check_in_date: assignment?.check_in_date || (event as any)?.start_date || "",
         check_out_date: assignment?.check_out_date || (event as any)?.end_date || "",
         sharing_with: roommates.length > 0 ? roommates.join(", ") : "Solo",
-        sharing_count: assignment?.room_number ? roommates.length + 1 : 1, // Include current member in count only if assigned
+        sharing_count: hasRoomNumber ? roommates.length + 1 : 1, // Include current member in count only if assigned
         special_requests: assignment?.special_requests || "",
-        is_assigned: !!assignment,
+        is_assigned: hasRoomNumber, // Only assigned if room_number is present and not empty
       };
     });
   }, [members, assignments, event]);
@@ -609,6 +638,25 @@ export default function StayManagementPage() {
     });
     return Array.from(counts).sort((a, b) => a - b);
   }, [memberAssignments]);
+
+  // Get unique room types from existing assignments
+  const uniqueRoomTypes = useMemo(() => {
+    const types = new Set<string>();
+    assignments.forEach((assignment) => {
+      if (assignment.room_type && assignment.room_type.trim() !== '') {
+        types.add(assignment.room_type.trim());
+      }
+    });
+    // Add common defaults if no assignments exist yet
+    if (types.size === 0) {
+      types.add('Single');
+      types.add('Double');
+      types.add('Triple');
+      types.add('Suite');
+      types.add('Other');
+    }
+    return Array.from(types).sort();
+  }, [assignments]);
 
   // Filtered members
   const filteredMembers = useMemo(() => {
@@ -823,11 +871,15 @@ export default function StayManagementPage() {
                     className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
                   >
                     <option value="all">All</option>
-                    <option value="Single">Single</option>
-                    <option value="Double">Double</option>
-                    <option value="Triple">Triple</option>
-                    <option value="Suite">Suite</option>
-                    <option value="Other">Other</option>
+                    {uniqueRoomTypes.length > 0 && (
+                      <>
+                        {uniqueRoomTypes.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -863,8 +915,8 @@ export default function StayManagementPage() {
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Employee ID</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Contact</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">KYC</th>
-                        <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Room No.</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Room Type</th>
+                        <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Room No.</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Sharing With</th>
                         <th className="text-left p-3 text-xs font-semibold text-slate-600 uppercase">Status</th>
                       </tr>
@@ -928,10 +980,10 @@ export default function StayManagementPage() {
                           )}
                         </td>
                         <td className="p-3 text-sm text-slate-700">
-                          {member.room_number || <span className="text-slate-400">—</span>}
+                          {member.room_type || <span className="text-slate-400">—</span>}
                         </td>
                         <td className="p-3 text-sm text-slate-700">
-                          {member.room_type || <span className="text-slate-400">—</span>}
+                          {member.room_number || <span className="text-slate-400">—</span>}
                         </td>
                         <td className="p-3 text-sm text-slate-700">
                           {member.sharing_with === "Solo" ? (
@@ -1215,11 +1267,13 @@ export default function StayManagementPage() {
         roomAssignment={
           selectedMember
             ? {
-                room_number: selectedMember.room_number,
                 room_type: selectedMember.room_type,
+                special_requests: selectedMember.special_requests,
+                room_number: selectedMember.room_number,
               }
             : null
         }
+        availableRoomTypes={uniqueRoomTypes}
         checkInRecords={selectedMember ? checkInRecords.get(selectedMember.id) : undefined}
         isCheckedIn={selectedMember ? checkedInMembers.has(selectedMember.id) : false}
         onCheckInToggle={handleCheckInToggle}

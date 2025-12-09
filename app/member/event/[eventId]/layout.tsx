@@ -277,7 +277,6 @@ export default function MemberEventLayout({
       icon: Plane,
       label: "Travel",
       href: `/member/event/${eventId}/travel`,
-      soon: true,
     },
     {
       icon: UtensilsCrossed,
@@ -313,13 +312,24 @@ export default function MemberEventLayout({
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <div className="flex-1 min-w-0">
-                <h1 className="text-base font-bold text-slate-900 truncate">
-                  {event.event_name}
-                </h1>
-                <p className="text-xs text-slate-500 truncate">
-                  {new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(event.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </p>
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {/* Partner Logo */}
+                {partner?.logo_url && (
+                  <img 
+                    src={partner.logo_url} 
+                    alt={partner.company_name || 'Partner'}
+                    className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-base font-bold text-slate-900 truncate">
+                    {event.event_name}
+                  </h1>
+                  <p className="text-xs text-slate-500 truncate">
+                    {partner?.company_name && `${partner.company_name} • `}
+                    {new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(event.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </p>
+                </div>
               </div>
             </div>
             <Button

@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, Upload, Link2, Search, Mail, Phone, User, Download, ChevronDown, FileCheck, X, Loader2, FileText } from "lucide-react";
+import { Plus, Upload, Link2, Search, Mail, Phone, User, Download, ChevronDown, FileCheck, X, Loader2, FileText, Trash2 } from "lucide-react";
 import QRCode from "react-qr-code";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,8 @@ export default function MembersPage() {
   const [event, setEvent] = useState<any>(null);
   const [partner, setPartner] = useState<any>(null);
   const qrCodeRef = useRef<HTMLDivElement>(null);
+  const [deletingMember, setDeletingMember] = useState<any>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Fetch members from API
   const fetchMembers = useCallback(async () => {
@@ -178,6 +180,35 @@ export default function MembersPage() {
     } catch (error) {
       console.error('Failed to save member:', error);
       alert('Failed to save member. Please try again.');
+    }
+  };
+
+  const handleDeleteFromDetails = () => {
+    setDeletingMember(viewingMember);
+    setIsDetailsDialogOpen(false);
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingMember) return;
+
+    try {
+      const response = await fetch(`/api/members/${deletingMember.id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await fetchMembers(); // Refresh the list
+        setShowDeleteDialog(false);
+        setDeletingMember(null);
+      } else {
+        alert(data.message || 'Failed to delete member');
+      }
+    } catch (error) {
+      console.error('Failed to delete member:', error);
+      alert('Failed to delete member. Please try again.');
     }
   };
 
@@ -792,6 +823,7 @@ export default function MembersPage() {
         onClose={() => setIsDetailsDialogOpen(false)}
         member={viewingMember}
         onEdit={handleEditFromDetails}
+        onDelete={handleDeleteFromDetails}
       />
 
       {/* Registration Link Dialog */}
@@ -846,6 +878,43 @@ export default function MembersPage() {
                 <Button variant="outline" onClick={handleDownloadQR}>
                   <Download className="mr-2 h-4 w-4" />
                   Download QR Code
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && deletingMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDeleteDialog(false)}>
+          <Card className="w-full max-w-md m-4" onClick={(e) => e.stopPropagation()}>
+            <CardHeader className="relative">
+              <CardTitle>Delete Member</CardTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-4 top-4 h-6 w-6"
+                onClick={() => setShowDeleteDialog(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-slate-600">
+                Are you sure you want to delete <strong>{deletingMember.name}</strong>?
+              </p>
+              <p className="text-sm text-slate-500">
+                This action will deactivate the member. They will no longer be able to access their account.
+              </p>
+              
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleConfirmDelete}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Member
                 </Button>
               </div>
             </CardContent>

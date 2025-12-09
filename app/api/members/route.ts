@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { checkPermission } from '@/lib/auth-helpers';
+import { sendNotificationViaN8N } from '@/lib/n8n-otp-service';
 
 // GET all members or members by event_id
 export async function GET(request: Request) {
@@ -93,6 +94,19 @@ export async function POST(request: Request) {
     const client = await pool.connect();
     
     try {
+      // Get event and partner details for notification
+      const eventData = await client.query(
+        `SELECT 
+          e.id, e.event_name, e.send_registration_notification,
+          p.company_name as client_name
+        FROM app.events e
+        LEFT JOIN app.partners p ON e.partner_id = p.id
+        WHERE e.id = $1 AND e.is_active = TRUE`,
+        [event_id]
+      );
+
+      const eventInfo = eventData.rows[0] || { event_name: 'Unknown Event', client_name: 'Unknown Client', send_registration_notification: true };
+
       const result = await client.query(
         `INSERT INTO app.members 
           (event_id, employee_id, name, email, country_code, phone, kyc_document_type, kyc_document_number, kyc_document_url)
@@ -110,6 +124,27 @@ export async function POST(request: Request) {
           kyc_document_url || null,
         ]
       );
+
+      // Send registration notification to n8n (non-blocking) if enabled for this event
+      const useN8N = process.env.USE_N8N_NOTIFICATIONS !== 'false' && process.env.N8N_NOTIFICATION_WEBHOOK_URL;
+      const sendNotification = eventInfo.send_registration_notification !== false; // Default to true
+      if (useN8N && sendNotification) {
+        sendNotificationViaN8N({
+          name: name,
+          phone: phone,
+          countryCode: country_code || '+91',
+          email: email,
+          type: 'registration',
+          data: {
+            client_name: eventInfo.client_name || 'Unknown Client',
+            event_name: eventInfo.event_name || 'Unknown Event',
+            employee_id: employee_id,
+          },
+        }).catch((error) => {
+          console.error('[Member Creation] Failed to send n8n notification:', error);
+          // Don't fail member creation if notification fails
+        });
+      }
 
       return NextResponse.json({ 
         status: 'success', 

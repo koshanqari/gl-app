@@ -30,8 +30,9 @@ interface Member {
 }
 
 interface RoomAssignment {
-  room_number?: string;
   room_type?: string;
+  special_requests?: string;
+  room_number?: string;
 }
 
 export interface CheckInRecord {
@@ -44,6 +45,7 @@ interface RoomAssignmentDialogProps {
   onClose: () => void;
   member?: Member | null;
   roomAssignment?: RoomAssignment | null;
+  availableRoomTypes?: string[];
   checkInRecords?: CheckInRecord[];
   isCheckedIn?: boolean;
   onCheckInToggle?: (memberId: string, currentState: boolean) => void;
@@ -55,33 +57,58 @@ export function RoomAssignmentDialog({
   onClose,
   member,
   roomAssignment,
+  availableRoomTypes = [],
   checkInRecords,
   isCheckedIn,
   onCheckInToggle,
   onSave,
 }: RoomAssignmentDialogProps) {
   const [formData, setFormData] = useState<RoomAssignment>({
+    room_type: "",
+    special_requests: "",
     room_number: "",
-    room_type: "Single",
   });
+  const [showNewRoomTypeInput, setShowNewRoomTypeInput] = useState(false);
+  const [newRoomType, setNewRoomType] = useState("");
 
   useEffect(() => {
     if (roomAssignment) {
       setFormData({
+        room_type: roomAssignment.room_type || "",
+        special_requests: roomAssignment.special_requests || "",
         room_number: roomAssignment.room_number || "",
-        room_type: roomAssignment.room_type || "Single",
       });
+      setShowNewRoomTypeInput(false);
+      setNewRoomType("");
     } else {
       setFormData({
+        room_type: "",
+        special_requests: "",
         room_number: "",
-        room_type: "Single",
       });
+      setShowNewRoomTypeInput(false);
+      setNewRoomType("");
     }
   }, [roomAssignment, isOpen]);
 
   const handleSave = () => {
-    onSave(formData);
+    const finalRoomType = showNewRoomTypeInput ? newRoomType : formData.room_type;
+    onSave({
+      ...formData,
+      room_type: finalRoomType,
+    });
     onClose();
+  };
+
+  const handleRoomTypeChange = (value: string) => {
+    if (value === "add_new") {
+      setShowNewRoomTypeInput(true);
+      setFormData({ ...formData, room_type: "" });
+    } else {
+      setShowNewRoomTypeInput(false);
+      setNewRoomType("");
+      setFormData({ ...formData, room_type: value });
+    }
   };
 
   if (!member) return null;
@@ -245,35 +272,76 @@ export function RoomAssignmentDialog({
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="room_number">Room Number</Label>
-                <Input
-                  id="room_number"
-                  value={formData.room_number}
-                  onChange={(e) =>
-                    setFormData({ ...formData, room_number: e.target.value })
-                  }
-                  placeholder="e.g., 205"
-                />
+                <Label htmlFor="room_type">Room Type</Label>
+                {showNewRoomTypeInput ? (
+                  <div className="space-y-2">
+                    <Input
+                      id="room_type_new"
+                      value={newRoomType}
+                      onChange={(e) => setNewRoomType(e.target.value)}
+                      placeholder="Enter new room type..."
+                      className="w-full"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowNewRoomTypeInput(false);
+                        setNewRoomType("");
+                        setFormData({ ...formData, room_type: "" });
+                      }}
+                      className="w-full"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <select
+                    id="room_type"
+                    value={formData.room_type || ""}
+                    onChange={(e) => handleRoomTypeChange(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="">Select room type...</option>
+                    {availableRoomTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                    <option value="add_new">+ Add New</option>
+                  </select>
+                )}
+              </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="room_number">Room Number</Label>
+                  <Input
+                    id="room_number"
+                    value={formData.room_number}
+                    onChange={(e) =>
+                      setFormData({ ...formData, room_number: e.target.value })
+                    }
+                    placeholder="e.g., 205"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="room_type">Room Type</Label>
-                <select
-                  id="room_type"
-                  value={formData.room_type}
+                <Label htmlFor="special_requests">Special Requests</Label>
+                <textarea
+                  id="special_requests"
+                  value={formData.special_requests}
                   onChange={(e) =>
-                    setFormData({ ...formData, room_type: e.target.value })
+                    setFormData({ ...formData, special_requests: e.target.value })
                   }
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="Single">Single</option>
-                  <option value="Double">Double</option>
-                  <option value="Triple">Triple</option>
-                  <option value="Suite">Suite</option>
-                  <option value="Other">Other</option>
-                </select>
+                  placeholder="e.g., High floor preferred, Near elevator"
+                  rows={3}
+                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
               </div>
             </div>
           </div>

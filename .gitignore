@@ -35,3 +35,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+n8n-brevo-config.md
+n8n-brevo-code-node.js
+n8n-brevo-http-body-simple.json

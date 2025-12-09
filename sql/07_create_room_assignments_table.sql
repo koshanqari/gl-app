@@ -7,15 +7,12 @@ CREATE TABLE IF NOT EXISTS app.room_assignments (
   event_id UUID NOT NULL REFERENCES app.events(id) ON DELETE CASCADE,
   member_id UUID NOT NULL REFERENCES app.members(id) ON DELETE CASCADE,
   
-  -- Room Details
-  room_number VARCHAR(50) NOT NULL,
-  room_type VARCHAR(50),  -- Single, Double, Triple, Suite, Other
+  -- Room Details (Order: HR fills room_type and special_requests, Hotel team fills room_number)
+  room_type VARCHAR(50),  -- Single, Double, Triple, Suite, Other (filled by HR)
+  special_requests TEXT,  -- Special requests/notes (filled by HR)
+  room_number VARCHAR(50),  -- Room number assigned by hotel team (NULL = unassigned)
   
-  -- Special Requests
-  special_requests TEXT,
-  
-  -- Status
-  status VARCHAR(50) DEFAULT 'assigned',  -- assigned, unassigned
+  -- Note: No status column needed - derive from room_number (NULL = unassigned, NOT NULL = assigned)
   
   -- Soft Delete
   is_active BOOLEAN DEFAULT TRUE NOT NULL,
@@ -38,7 +35,7 @@ CREATE INDEX idx_room_assignments_is_active ON app.room_assignments(is_active);
 -- Insert mock room assignments for Annual Tech Summit 2024
 -- Demonstrating automatic sharing: Multiple members in same room
 -- Only 5 members exist: EMP001-EMP005
-INSERT INTO app.room_assignments (event_id, member_id, room_number, room_type, special_requests, status, created_by)
+INSERT INTO app.room_assignments (event_id, member_id, room_number, room_type, special_requests, created_by)
 VALUES
 -- Room 205: Alice and Bob sharing (Double room)
 (
@@ -47,7 +44,6 @@ VALUES
   '205',
   'Double',
   'High floor preferred',
-  'assigned',
   (SELECT id FROM app.executives WHERE email = 'mailtoqari@gmail.com')
 ),
 (
@@ -56,7 +52,6 @@ VALUES
   '205',
   'Double',
   NULL,
-  'assigned',
   (SELECT id FROM app.executives WHERE email = 'mailtoqari@gmail.com')
 ),
 
@@ -67,7 +62,6 @@ VALUES
   '308',
   'Double',
   'Near elevator',
-  'assigned',
   (SELECT id FROM app.executives WHERE email = 'mailtoqari@gmail.com')
 ),
 (
@@ -76,7 +70,6 @@ VALUES
   '308',
   'Double',
   NULL,
-  'assigned',
   (SELECT id FROM app.executives WHERE email = 'mailtoqari@gmail.com')
 );
 
