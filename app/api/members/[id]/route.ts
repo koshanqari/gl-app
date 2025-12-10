@@ -195,7 +195,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-// DELETE member (soft delete)
+// DELETE member (hard delete)
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -206,7 +206,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     
     try {
       const memberResult = await client.query(
-        `SELECT event_id FROM app.members WHERE id = $1 AND is_active = TRUE`,
+        `SELECT event_id FROM app.members WHERE id = $1`,
         [id]
       );
       
@@ -214,7 +214,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         client.release();
         return NextResponse.json({
           status: 'error',
-          message: 'Member not found or already inactive',
+          message: 'Member not found',
         }, { status: 404 });
       }
       
@@ -235,24 +235,23 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const deleteClient = await pool.connect();
     
     try {
+      // Hard delete - completely remove the member from the database
+      // This allows the same employee_id to be re-added later (with new notification)
       const result = await deleteClient.query(
-        `UPDATE app.members 
-        SET is_active = FALSE, updated_at = NOW() 
-        WHERE id = $1 
-        RETURNING id`,
+        `DELETE FROM app.members WHERE id = $1 RETURNING id`,
         [id]
       );
 
       if (result.rows.length === 0) {
         return NextResponse.json({ 
           status: 'error', 
-          message: 'Member not found or already inactive' 
+          message: 'Member not found' 
         }, { status: 404 });
       }
 
       return NextResponse.json({ 
         status: 'success', 
-        message: 'Member deleted successfully (soft delete)' 
+        message: 'Member deleted successfully' 
       }, { status: 200 });
       
     } finally {
